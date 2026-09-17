@@ -1660,99 +1660,85 @@ const DateRangePicker = ({ onClose, onSelect, initialRange, lang, minDate, maxDa
 };
 
 const AdvancedSearch = ({ filters, setFilters, lang, onSearch, onSaveSearch, setSearchTriggered }) => {
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [searchTerm, setSearchTerm] = useState(filters.hotelName || "");
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-  const [cities, setCities] = useState([]);
+  const [routes, setRoutes] = useState([]);
   const t = useTranslation(lang);
 
   useEffect(() => {
-    const fetchCities = async () => {
-      const uniqueCities = await hotelService.getUniqueCities();
-      const baseCities = ['makkah', 'madinah'];
-      if (uniqueCities && uniqueCities.length > 0) {
-        const combined = new Set([...baseCities, ...uniqueCities.map(c => c.toLowerCase())]);
-        setCities(Array.from(combined));
-      } else {
-        setCities(baseCities);
+    const fetchRoutes = async () => {
+      try {
+        const { data, error } = await supabase.from('routes').select('*').eq('is_active', true);
+        if (!error && data) {
+          setRoutes(data);
+        }
+      } catch (err) {
+        console.error(err);
       }
     };
-    fetchCities();
+    fetchRoutes();
   }, []);
-
-  // Autocomplete
-  useEffect(() => {
-    const fetchSuggestions = async () => {
-      if (searchTerm.length > 1) {
-        const results = await hotelService.searchHotelsByName(searchTerm);
-        setSuggestions(results || []);
-      } else {
-        setSuggestions([]);
-      }
-    };
-    const timeoutId = setTimeout(fetchSuggestions, 300);
-    return () => clearTimeout(timeoutId);
-  }, [searchTerm]);
-
-  const formatDateShort = (dateStr) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
-  };
 
   return (
     <div className="pt-28 pb-8 px-4 md:px-6 max-w-7xl mx-auto" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       <div className="bg-white rounded-3xl shadow-[0_12px_40px_-10px_rgba(0,0,0,0.08)] border border-gray-100 p-6 max-w-5xl mx-auto relative z-30">
-        <div className="flex justify-center mb-6"><div className="bg-gray-100 p-1 rounded-xl inline-flex"><button onClick={() => setFilters({ ...filters, type: 'room' })} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${filters.type === 'room' ? 'bg-white text-emerald-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>{t('fullRoom')}</button><button onClick={() => setFilters({ ...filters, type: 'bed' })} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${filters.type === 'bed' ? 'bg-white text-emerald-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>{t('bedOnly')}</button></div></div>
+        
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-          <div className="md:col-span-2 space-y-1.5"><label className={`text-xs font-bold text-gray-500 uppercase tracking-wider ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('dest')}</label><div className="relative"><select value={filters.city} onChange={(e) => setFilters({ ...filters, city: e.target.value })} className={`w-full bg-gray-50 border-none rounded-xl py-3 ${lang === 'ar' ? 'pr-4 pl-8' : 'pl-4 pr-8'} font-semibold text-gray-900 focus:ring-2 focus:ring-emerald-500/20 cursor-pointer appearance-none hover:bg-gray-100`}>
-            {cities.map(city => {
-              const c = city.toLowerCase();
-              return (
-                <option key={city} value={city}>
-                  {c === 'makkah' || c === 'مكة' ? t('makkah') : c === 'madinah' || c === 'المدينة' ? t('madinah') : city}
-                </option>
-              );
-            })}
-          </select><ChevronDown className={`absolute ${lang === 'ar' ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none`} size={16} /></div></div>
-          <div className="md:col-span-3 space-y-1.5 relative">
-            <label className={`text-xs font-bold text-gray-500 uppercase tracking-wider ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('hotel')}</label>
+          <div className="md:col-span-5 space-y-1.5">
+            <label className={`text-xs font-bold text-gray-500 uppercase tracking-wider ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>
+              {lang === 'ar' ? 'المسار (من - إلى)' : 'Route (From - To)'}
+            </label>
             <div className="relative">
-              <input type="text" placeholder={t('search') + "..."} value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setShowSuggestions(true); setFilters({ ...filters, hotelName: e.target.value }); }}
-                className={`w-full bg-gray-50 border-none rounded-xl py-3 ${lang === 'ar' ? 'pr-4 pl-10' : 'pl-4 pr-10'} font-medium text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-emerald-500/20 hover:bg-gray-100`} />
-              <Search className={`absolute ${lang === 'ar' ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400`} size={16} />
-            </div>
-            {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50 max-h-48 overflow-y-auto">
-                {suggestions.map(h => (
-                  <div key={h.id} onClick={() => { setSearchTerm(h.name); setFilters({ ...filters, hotelName: h.name }); setShowSuggestions(false); }} className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-sm font-medium text-gray-700 flex justify-between">
-                    <span>{h.name}</span>
-                    <span className="text-xs text-gray-400">{h.city?.toLowerCase() === 'makkah' || h.city === 'مكة' ? t('makkah') : h.city?.toLowerCase() === 'madinah' || h.city === 'المدينة' ? t('madinah') : h.city}</span>
-                  </div>
+              <select 
+                value={filters.route_id || 'all'} 
+                onChange={(e) => setFilters({ ...filters, route_id: e.target.value })} 
+                className={`w-full bg-gray-50 border-none rounded-xl py-3 ${lang === 'ar' ? 'pr-4 pl-8' : 'pl-4 pr-8'} font-semibold text-gray-900 focus:ring-2 focus:ring-emerald-500/20 cursor-pointer appearance-none hover:bg-gray-100`}
+              >
+                <option value="all">{lang === 'ar' ? 'كل المسارات' : 'All Routes'}</option>
+                {routes.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.title}
+                  </option>
                 ))}
-              </div>
-            )}
+              </select>
+              <Navigation className={`absolute ${lang === 'ar' ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none`} size={16} />
+            </div>
           </div>
-          <div className="md:col-span-3 space-y-1.5 relative"><label className={`text-xs font-bold text-gray-500 uppercase tracking-wider ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('date')}</label><div onClick={() => setShowCalendar(!showCalendar)} className={`bg-gray-50 rounded-xl py-3 px-4 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors group ${showCalendar ? 'ring-2 ring-emerald-500/20 bg-white' : ''}`}><span className="font-semibold text-gray-900 text-sm">{filters.dates.start ? `${formatDateShort(filters.dates.start)} -> ${formatDateShort(filters.dates.end)}` : t('selectDates')}</span><CalendarIcon size={16} className="text-gray-400 group-hover:text-emerald-700" /></div>{showCalendar && (<DateRangePicker onClose={() => setShowCalendar(false)} onSelect={(range) => setFilters({ ...filters, dates: range })} initialRange={filters.dates} lang={lang} />)}</div>
-          <div className="md:col-span-2 space-y-1.5"><label className={`text-xs font-bold text-gray-500 uppercase tracking-wider ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>{t('guests')}</label><div className="relative"><select value={filters.capacity} onChange={(e) => setFilters({ ...filters, capacity: e.target.value })} className={`w-full bg-gray-50 border-none rounded-xl py-3 ${lang === 'ar' ? 'pr-4 pl-8' : 'pl-4 pr-8'} font-semibold text-gray-900 focus:ring-2 focus:ring-emerald-500/20 cursor-pointer appearance-none hover:bg-gray-100`}><option value="all">{t('roomOptions.all')}</option><option value="2">{t('roomOptions.double')}</option><option value="3">{t('roomOptions.triple')}</option><option value="4">{t('roomOptions.quad')}</option><option value="5">{t('roomOptions.quint')}</option></select><Users className={`absolute ${lang === 'ar' ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none`} size={16} /></div></div>
-          <div className="md:col-span-2 flex gap-2">
-            <button onClick={() => { onSearch(); setSearchTriggered(true); }} className="w-full bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl py-3 font-bold text-sm shadow-lg hover:shadow-xl transform active:scale-95 transition-all flex items-center justify-center gap-2"><Search size={18} />{t('search')}</button>
+
+          <div className="md:col-span-4 space-y-1.5">
+            <label className={`text-xs font-bold text-gray-500 uppercase tracking-wider ${lang === 'ar' ? 'mr-1' : 'ml-1'}`}>
+              {lang === 'ar' ? 'نوع المركبة' : 'Vehicle Type'}
+            </label>
+            <div className="relative">
+              <select 
+                value={filters.vehicle_type || 'all'} 
+                onChange={(e) => setFilters({ ...filters, vehicle_type: e.target.value })} 
+                className={`w-full bg-gray-50 border-none rounded-xl py-3 ${lang === 'ar' ? 'pr-4 pl-8' : 'pl-4 pr-8'} font-semibold text-gray-900 focus:ring-2 focus:ring-emerald-500/20 cursor-pointer appearance-none hover:bg-gray-100`}
+              >
+                <option value="all">{lang === 'ar' ? 'الكل' : 'All'}</option>
+                <option value="car">{lang === 'ar' ? 'سيارة' : 'Car'}</option>
+                <option value="bus">{lang === 'ar' ? 'حافلة' : 'Bus'}</option>
+              </select>
+              <Car className={`absolute ${lang === 'ar' ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none`} size={16} />
+            </div>
+          </div>
+
+          <div className="md:col-span-3 flex gap-2">
+            <button 
+              onClick={() => { onSearch(); setSearchTriggered(true); }} 
+              className="w-full bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl py-3 font-bold text-sm shadow-lg hover:shadow-xl transform active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              <Search size={18} />{t('search')}
+            </button>
           </div>
         </div>
-        <div className="mt-6 pt-4 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4"><div className="flex items-center gap-4 w-full md:w-auto"><span className="text-xs font-bold text-gray-500 uppercase whitespace-nowrap">{t('budget')}</span><div className="flex-1 md:w-64 flex items-center gap-3"><span className="text-sm font-medium text-gray-600">2000</span><input type="range" min="2000" max="50000" step="500" value={filters.budget} onChange={(e) => setFilters({ ...filters, budget: parseInt(e.target.value) })} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-emerald-800" dir="ltr" /><span className="text-sm font-bold text-emerald-900">{filters.budget} {t('currency')}</span></div></div></div>
       </div>
-      {/* Trust Bar */}
       <div className="mt-4 flex items-center justify-center gap-6 text-xs text-gray-500">
         <span className="flex items-center gap-1.5"><Shield size={14} className="text-emerald-600" />{lang === 'ar' ? 'دفع آمن 100%' : '100% Secure'}</span>
-        <span className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-600" />{lang === 'ar' ? 'فنادق موثقة' : 'Verified Hotels'}</span>
-        <span className="flex items-center gap-1.5"><Users size={14} className="text-emerald-600" />{lang === 'ar' ? '+2,500 معتمر سعيد' : '+2,500 Happy Pilgrims'}</span>
+        <span className="flex items-center gap-1.5"><CheckCircle size={14} className="text-emerald-600" />{lang === 'ar' ? 'نواقل موثقون' : 'Verified Transporters'}</span>
+        <span className="flex items-center gap-1.5"><Users size={14} className="text-emerald-600" />{lang === 'ar' ? 'رحلات مريحة' : 'Comfortable Trips'}</span>
       </div>
     </div>
   );
 };
-
 // --- Hotel Details ---
 const HotelDetails = ({ hotel, onBack, lang, onOpenChat, filters, user, profile, onBooked, isFavorite, onToggleFavorite, showToast, isUserOnline }) => {
   const [activeTab, setActiveTab] = useState('room');
@@ -2575,7 +2561,7 @@ export default function TalbiaApp() {
   const [chatUser, setChatUser] = useState(null);
   const [voucher, setVoucher] = useState(null);
   const [isWhatsappOpen, setIsWhatsappOpen] = useState(false);
-  const [filters, setFilters] = useState({ city: 'makkah', hotelName: '', dates: { start: null, end: null }, capacity: 'all', type: 'room', budget: 35000 });
+  const [filters, setFilters] = useState({ route_id: 'all', vehicle_type: 'all' });
   const [messageNotification, setMessageNotification] = useState(null);
   const [initialPilgrimTab, setInitialPilgrimTab] = useState('bookings');
   const [unreadCount, setUnreadCount] = useState(0);
