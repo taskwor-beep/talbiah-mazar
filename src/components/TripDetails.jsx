@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Navigation, MapPin, Calendar, Users, Phone, Shield } from 'lucide-react';
-import { useTranslation } from '../hooks/useTranslation'; // Assuming this exists or define t locally
 import { bookingService } from '../services/bookingService';
 import { tripService } from '../services/tripService';
 
