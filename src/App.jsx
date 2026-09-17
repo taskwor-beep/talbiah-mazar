@@ -36,6 +36,8 @@ import PilgrimPanel from './PilgrimPanel';
 import VoucherTemplate from './components/VoucherTemplate';
 import CustomPageViewer from './components/CustomPageViewer';
 import HotelMapViewer from './components/HotelMapViewer';
+import OfferCard from './components/OfferCard';
+import TripDetails from './components/TripDetails';
 import { DataProvider } from './context/DataContext';
 
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -2950,20 +2952,7 @@ export default function TalbiaApp() {
           />
         ) : voucher ? (
           <BookingVoucherPage booking={voucher} onBack={() => { setVoucher(null); setSelectedHotel(null); }} lang={lang} />
-        ) : selectedHotel ? (
-          <HotelDetails
-            hotel={selectedHotel}
-            onBack={() => setSelectedHotel(null)}
-            lang={lang}
-            onOpenChat={(user) => setChatUser(user)}
-            filters={filters}
-            user={user}
-            onBooked={(b) => setVoucher(b)}
-            isFavorite={(favoritesIds || []).includes(selectedHotel.offerId || selectedHotel.id)}
-            onToggleFavorite={handleToggleFavorite}
-            showToast={showToast}
-            isUserOnline={isUserOnline}
-          />
+        ) : selectedHotel ? (<TripDetails hotel={selectedHotel} onBack={() => setSelectedHotel(null)} lang={lang} user={user} showToast={toast.error} />
         ) : (
           <>
             <Navbar
@@ -2983,7 +2972,7 @@ export default function TalbiaApp() {
               <AdvancedSearch filters={filters} setFilters={setFilters} lang={lang} onSearch={handleSearch} setSearchTriggered={setSearchTriggered} onSaveSearch={() => user && commonService.saveSearch(user.id, { ...filters, capacity: filters.capacity === 'all' ? null : parseInt(filters.capacity) })} />
               <div className="max-w-7xl mx-auto px-4 md:px-6 py-4">
                 <div className="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4"><div><h2 className="text-2xl font-bold text-gray-900">{t('recommended')}</h2><p className="text-sm text-gray-500 mt-1">{t('resultsFound', { count: hotels.length })}</p></div><div className="flex gap-2"><button onClick={() => resetSearch()} className="px-4 py-1.5 bg-white border border-gray-200 rounded-full text-xs font-bold text-gray-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all flex items-center gap-1.5">{lang === 'ar' ? '↺ إعادة تعيين الفلاتر' : '↺ Reset Filters'}</button></div></div>
-                {hotels.length > 0 ? (<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">{hotels.map((hotel, index) => (<div key={hotel.offerId || `hotel-${index}`} onClick={() => setSelectedHotel(hotel)}><RoomCard hotel={hotel} lang={lang} user={user} isFavorite={(favoritesIds || []).includes(hotel.offerId || hotel.id)} onToggleFavorite={handleToggleFavorite} onClick={() => setSelectedHotel(hotel)} /></div>))}</div>) : (<div className="text-center py-20 bg-white rounded-3xl border border-gray-100"><div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400"><Search size={32} /></div><h3 className="text-xl font-bold text-gray-900">{t('noResults')}</h3><button onClick={() => resetSearch()} className="mt-6 text-emerald-800 font-bold hover:underline">{t('resetFilters')}</button></div>)}
+                {hotels.length > 0 ? (<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">{hotels.map((hotel, index) => (<div key={hotel.offerId || `hotel-${index}`} onClick={() => setSelectedHotel(hotel)}><OfferCard offer={hotel} lang={lang} onBook={() => setSelectedHotel(hotel)} /></div>))}</div>) : (<div className="text-center py-20 bg-white rounded-3xl border border-gray-100"><div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400"><Search size={32} /></div><h3 className="text-xl font-bold text-gray-900">{t('noResults')}</h3><button onClick={() => resetSearch()} className="mt-6 text-emerald-800 font-bold hover:underline">{t('resetFilters')}</button></div>)}
               </div>
             </div>
             <Footer lang={lang} onPageClick={(slug) => { setSelectedPageSlug(slug); window.scrollTo(0,0); }} />
@@ -2997,5 +2986,6 @@ export default function TalbiaApp() {
     </DataProvider>
   );
 }
+
 
 

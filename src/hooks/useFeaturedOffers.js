@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { hotelService } from '../services/hotelService';
+import { tripService } from '../services/tripService';
 
 export const useFeaturedOffers = () => {
     return useQuery({
-        queryKey: ['featured-offers'],
-        queryFn: () => hotelService.getFeaturedOffers(),
+        queryKey: ['featured-trip-offers'],
+        queryFn: () => tripService.searchOffers({}), // Fetch all active offers by default
         staleTime: 10 * 60 * 1000, // 10 minutes
         refetchOnWindowFocus: false,
     });

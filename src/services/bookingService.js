@@ -13,7 +13,7 @@ export const bookingService = {
         }
 
         const { data, error } = await supabase
-            .from('bookings')
+            .from('trip_bookings')
             .insert([bookingData])
             .select()
             .single();
@@ -35,9 +35,9 @@ export const bookingService = {
     // 1.2 My Bookings
     getUserBookings: async (userId) => {
         const { data, error } = await supabase
-            .from('bookings')
-            .select('*, offer:offers(*, room:rooms(*, hotel:hotels(*)))')
-            .eq('user_id', userId)
+            .from('trip_bookings')
+            .select('*, offer:offer_id(*, route:route_id(*), transporter:transporter_id(*))')
+            .eq('pilgrim_id', userId)
             // Show typical booking statuses
             .in('status', ['pending', 'confirmed', 'cancelled', 'completed'])
             .order('created_at', { ascending: false });
@@ -225,7 +225,7 @@ export const bookingService = {
         }
 
         const { error } = await supabase
-            .from('bookings')
+            .from('trip_bookings')
             .update(updateData)
             .eq('id', bookingId);
 
@@ -258,8 +258,8 @@ export const bookingService = {
         // 2. Fetch Booking for Amount (Security)
         console.log('[bookingService] createCheckoutSession called', { bookingId, userId });
         const { data: booking, error } = await supabase
-            .from('bookings')
-            .select('deposit_amount, offer:offers(price_per_night, discount_price), guests, check_in, check_out')
+            .from('trip_bookings')
+            .select('total_price, offer:offer_id(price_total), passengers_count, trip_date')
             .eq('id', bookingId)
             .single();
 
@@ -267,8 +267,8 @@ export const bookingService = {
 
         if (error || !booking) throw new Error('Booking not found');
 
-        // Use the explicit deposit_amount calculated and saved by the frontend checkout flow
-        const amount = booking.deposit_amount || (booking.offer.discount_price || booking.offer.price_per_night);
+        // Full price is paid
+        const amount = booking.total_price || booking.offer.price_total;
 
         if (amount <= 0) throw new Error('Invalid amount');
 

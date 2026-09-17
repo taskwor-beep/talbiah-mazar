@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { pilgrimService } from '../services/pilgrimService';
+import { tripService } from '../services/tripService';
 
 export const useBookings = (userId) => {
     return useQuery({
-        queryKey: ['bookings', userId],
-        queryFn: () => pilgrimService.getBookings(userId),
+        queryKey: ['trip_bookings', userId],
+        queryFn: () => tripService.getPilgrimBookings(userId),
         enabled: !!userId,
     });
 };
