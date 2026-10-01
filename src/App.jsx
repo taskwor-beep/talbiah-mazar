@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { MapPin, Navigation, Car, ShieldCheck, Wallet, Search, Star, X, User } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
+import PilgrimDashboard from './components/PilgrimDashboard';
+import DriverDashboard from './components/DriverDashboard';
 
 export default function App() {
   const [pickup, setPickup] = useState('');
@@ -11,6 +13,7 @@ export default function App() {
   const [authType, setAuthType] = useState('pilgrim_login'); // 'pilgrim_login' | 'driver_register' | 'pilgrim_register'
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userName, setUserName] = useState('');
+  const [userRole, setUserRole] = useState('pilgrim');
 
   const mazarat = [
     { name: 'غار حراء', price: '1500', rating: '4.9' },
@@ -31,8 +34,10 @@ export default function App() {
     e.preventDefault();
     // Simulate auth success
     const nameInput = e.target.querySelector('input[type="text"]');
-    let defaultName = authType.includes('driver') ? 'كابتن مزار' : 'مستخدم مزار';
+    const isDriver = authType.includes('driver');
+    let defaultName = isDriver ? 'كابتن مزار' : 'مستخدم مزار';
     setUserName(nameInput && nameInput.value ? nameInput.value : defaultName);
+    setUserRole(isDriver ? 'driver' : 'pilgrim');
     setIsLoggedIn(true);
     closeAuthModal();
     toast.success(
@@ -40,6 +45,25 @@ export default function App() {
       { position: 'top-center', duration: 4000 }
     );
   };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setUserName('');
+    toast('تم تسجيل الخروج');
+  };
+
+  if (isLoggedIn) {
+    return (
+      <>
+        <Toaster />
+        {userRole === 'driver' ? (
+          <DriverDashboard userName={userName} onLogout={handleLogout} />
+        ) : (
+          <PilgrimDashboard userName={userName} onLogout={handleLogout} />
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen font-sans text-gray-900 bg-orange-50 selection:bg-orange-200">
@@ -56,35 +80,18 @@ export default function App() {
           </span>
         </div>
         <div className="flex items-center gap-4">
-          {isLoggedIn ? (
-            <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full shadow-sm border border-orange-100">
-              <div className="bg-orange-100 p-1.5 rounded-full text-orange-600">
-                <User size={20} />
-              </div>
-              <span className="font-bold text-gray-800">{userName}</span>
-              <button 
-                onClick={() => { setIsLoggedIn(false); toast('تم تسجيل الخروج'); }}
-                className="text-sm text-red-500 font-bold ml-2 border-l pl-2 border-gray-200 hover:text-red-700 transition"
-              >
-                خروج
-              </button>
-            </div>
-          ) : (
-            <>
-              <button 
-                onClick={() => openAuthModal('driver_register')}
-                className="text-gray-700 font-bold hover:text-orange-600 transition"
-              >
-                انضم كسائق
-              </button>
-              <button 
-                onClick={() => openAuthModal('pilgrim_login')}
-                className="bg-white text-orange-600 px-5 py-2.5 rounded-full font-bold shadow-md hover:shadow-lg transition"
-              >
-                تسجيل الدخول
-              </button>
-            </>
-          )}
+          <button 
+            onClick={() => openAuthModal('driver_register')}
+            className="text-gray-700 font-bold hover:text-orange-600 transition"
+          >
+            انضم كسائق
+          </button>
+          <button 
+            onClick={() => openAuthModal('pilgrim_login')}
+            className="bg-white text-orange-600 px-5 py-2.5 rounded-full font-bold shadow-md hover:shadow-lg transition"
+          >
+            تسجيل الدخول
+          </button>
         </div>
       </nav>
 
