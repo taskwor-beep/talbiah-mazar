@@ -149,7 +149,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   };
 
   const rejectOffer = async () => {
-    await supabase.from('orders').update({ status: 'pending', driver_id: null, total_amount: null }).eq('id', currentOrderId);
+    await supabase.from('orders').update({ status: 'pending', driver_id: null, total_amount: 0 }).eq('id', currentOrderId);
     setRideStatus('requesting');
     setOfferedRide(null);
     toast.error('تم رفض العرض، ننتظر عرضاً من سائق آخر...');

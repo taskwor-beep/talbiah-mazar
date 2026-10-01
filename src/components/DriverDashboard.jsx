@@ -14,6 +14,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [packages, setPackages] = useState([]);
   const [driverId, setDriverId] = useState(null);
   const [driverStatus, setDriverStatus] = useState('approved');
+  const [activeRide, setActiveRide] = useState(null);
   const [pricePrompt, setPricePrompt] = useState(null);
   const [newOfferPrice, setNewOfferPrice] = useState('');
   
@@ -77,7 +78,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       } else {
         setActiveRide(null);
         const { data: pendingOrders } = await supabase.from('orders')
-          .select('*')
+          .select('*, users!orders_customer_id_fkey(phone_number)')
           .in('status', ['pending', 'pending_driver_approval']);
         
         if (pendingOrders) {
