@@ -26,7 +26,8 @@ CREATE TABLE public.drivers (
     total_deliveries INTEGER DEFAULT 0,
     is_online BOOLEAN DEFAULT FALSE,
     current_latitude DOUBLE PRECISION,
-    current_longitude DOUBLE PRECISION
+    current_longitude DOUBLE PRECISION,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected'))
 );
 
 -- 3. Restaurants / Stores Table
@@ -86,4 +87,52 @@ CREATE TABLE public.delivery_tracking (
     latitude DOUBLE PRECISION NOT NULL,
     longitude DOUBLE PRECISION NOT NULL,
     status TEXT
+);
+
+-- 7. Admin Settings
+CREATE TABLE public.admin_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    key TEXT UNIQUE NOT NULL,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Insert default settings
+INSERT INTO public.admin_settings (key, value) VALUES 
+('exchange_rate', '{"dzd_to_sar": 0.028}'::jsonb),
+('social_popup', '{"is_active": false, "title": "تابعنا على المنصات الاجتماعية!", "description": "اشترك الآن ليصلك كل جديد عن عروض مزار.", "link": "https://twitter.com"}'::jsonb),
+('ad_popup', '{"is_active": true, "title": "إعلان هام", "description": "احجز باقتك الآن واحصل على خصم 10% بمناسبة الموسم!", "image_url": ""}'::jsonb);
+
+-- 8. Driver Offers
+CREATE TABLE public.driver_offers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    driver_id UUID REFERENCES public.drivers(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    price_dzd DECIMAL(10,2) NOT NULL,
+    details TEXT,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected'))
+);
+
+-- 9. Driver Packages
+CREATE TABLE public.driver_packages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    driver_id UUID REFERENCES public.drivers(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    price_dzd DECIMAL(10,2) NOT NULL,
+    discount_dzd DECIMAL(10,2) DEFAULT 0,
+    details TEXT,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected'))
+);
+
+-- 10. Package Steps (Timeline)
+CREATE TABLE public.package_steps (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    package_id UUID REFERENCES public.driver_packages(id) ON DELETE CASCADE,
+    step_order INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    start_time TEXT,
+    end_time TEXT,
+    price_dzd DECIMAL(10,2) NOT NULL
 );

@@ -1,54 +1,133 @@
-import React, { useState } from 'react';
-import { Users, UserPlus, Settings, List as ListIcon, Check, X, Megaphone, Smartphone, Star, Search, Shield } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Users, UserPlus, Settings, List as ListIcon, Check, X, Megaphone, Smartphone, Star, Search, Shield, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 export default function AdminDashboard({ userName, onLogout, onGoHome }) {
   const [activeTab, setActiveTab] = useState('users');
   
-  // Mock Data
-  const [users, setUsers] = useState([
-    { id: 1, name: 'أحمد علي', phone: '+966500000001', role: 'pilgrim', date: '2026-10-01' },
-    { id: 2, name: 'محمد خالد', phone: '+213500000002', role: 'driver', date: '2026-10-01' },
-  ]);
-
-  const [driverRequests, setDriverRequests] = useState([
-    { id: 101, name: 'سعيد عبدلله', phone: '+966500000003', vehicle: 'سيدان (4 ركاب)', status: 'pending' },
-    { id: 102, name: 'عمر حسن', phone: '+213500000004', vehicle: 'عائلية (7 ركاب)', status: 'pending' },
-  ]);
-
-  const [offers, setOffers] = useState([
-    { id: 201, driverName: 'محمد خالد', title: 'توصيل للمطار', priceDZD: 4000, details: 'سيارة مريحة ومكيفة', status: 'pending' },
-    { id: 202, driverName: 'علي رضا', title: 'باقة المزارات الكاملة', priceDZD: 12000, details: 'تشمل غار حراء ومسجد قباء', status: 'pending' }
-  ]);
-
+  const [users, setUsers] = useState([]);
+  const [driverRequests, setDriverRequests] = useState([]);
+  const [offers, setOffers] = useState([]);
+  
   const [settings, setSettings] = useState({
-    socialPopupActive: false,
-    adPopupActive: true,
+    exchange_rate: { dzd_to_sar: 0.028 },
+    social_popup: { is_active: false, title: "تابعنا على المنصات الاجتماعية!", description: "اشترك الآن ليصلك كل جديد عن عروض مزار.", link: "https://twitter.com" },
+    ad_popup: { is_active: true, title: "إعلان هام", description: "احجز باقتك الآن واحصل على خصم 10% بمناسبة الموسم!", image_url: "" }
   });
+  
+  const [loading, setLoading] = useState(true);
 
-  const approveDriver = (id) => {
-    setDriverRequests(prev => prev.filter(r => r.id !== id));
-    toast.success('تمت الموافقة على السائق بنجاح');
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // Fetch users
+      const { data: usersData } = await supabase.from('users').select('*').order('created_at', { ascending: false });
+      if (usersData) setUsers(usersData);
+
+      // Fetch driver requests (status = pending)
+      const { data: driversData } = await supabase.from('drivers').select('*, users(full_name, phone_number)').eq('status', 'pending');
+      if (driversData) {
+        setDriverRequests(driversData.map(d => ({
+          id: d.id, name: d.users?.full_name, phone: d.users?.phone_number, vehicle: d.vehicle_type, status: d.status
+        })));
+      }
+
+      // Fetch offers (status = pending)
+      const { data: offersData } = await supabase.from('driver_offers').select('*, drivers(users(full_name))').eq('status', 'pending');
+      if (offersData) {
+        setOffers(offersData.map(o => ({
+          id: o.id, driverName: o.drivers?.users?.full_name, title: o.title, priceDZD: o.price_dzd, details: o.details, status: o.status
+        })));
+      }
+
+      // Fetch settings
+      const { data: settingsData } = await supabase.from('admin_settings').select('*');
+      if (settingsData && settingsData.length > 0) {
+        const newSettings = { ...settings };
+        settingsData.forEach(s => {
+          if (newSettings[s.key]) newSettings[s.key] = s.value;
+        });
+        setSettings(newSettings);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const rejectDriver = (id) => {
-    setDriverRequests(prev => prev.filter(r => r.id !== id));
-    toast.error('تم رفض طلب السائق');
+  const approveDriver = async (id) => {
+    const { error } = await supabase.from('drivers').update({ status: 'approved' }).eq('id', id);
+    if (!error) {
+      setDriverRequests(prev => prev.filter(r => r.id !== id));
+      toast.success('تمت الموافقة على السائق بنجاح');
+    } else {
+      toast.error('حدث خطأ');
+    }
   };
 
-  const approveOffer = (id) => {
-    setOffers(prev => prev.filter(o => o.id !== id));
-    toast.success('تمت الموافقة على العرض');
+  const rejectDriver = async (id) => {
+    const { error } = await supabase.from('drivers').update({ status: 'rejected' }).eq('id', id);
+    if (!error) {
+      setDriverRequests(prev => prev.filter(r => r.id !== id));
+      toast.error('تم رفض طلب السائق');
+    }
   };
 
-  const rejectOffer = (id) => {
-    setOffers(prev => prev.filter(o => o.id !== id));
-    toast.error('تم رفض العرض');
+  const approveOffer = async (id) => {
+    const { error } = await supabase.from('driver_offers').update({ status: 'approved' }).eq('id', id);
+    if (!error) {
+      setOffers(prev => prev.filter(o => o.id !== id));
+      toast.success('تمت الموافقة على العرض');
+    }
+  };
+
+  const rejectOffer = async (id) => {
+    const { error } = await supabase.from('driver_offers').update({ status: 'rejected' }).eq('id', id);
+    if (!error) {
+      setOffers(prev => prev.filter(o => o.id !== id));
+      toast.error('تم رفض العرض');
+    }
+  };
+
+  const saveSettings = async (key) => {
+    const value = settings[key];
+    
+    // Check if it exists
+    const { data } = await supabase.from('admin_settings').select('id').eq('key', key).single();
+    
+    if (data) {
+      await supabase.from('admin_settings').update({ value }).eq('key', key);
+    } else {
+      await supabase.from('admin_settings').insert([{ key, value }]);
+    }
+    toast.success('تم حفظ الإعدادات بنجاح');
   };
 
   const toggleSetting = (key) => {
-    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
-    toast.success('تم تحديث الإعدادات');
+    setSettings(prev => {
+      const updated = { ...prev, [key]: { ...prev[key], is_active: !prev[key].is_active } };
+      // Save to DB immediately
+      supabase.from('admin_settings').update({ value: updated[key] }).eq('key', key).then(() => {
+        toast.success(updated[key].is_active ? 'تم التفعيل' : 'تم الإيقاف');
+      });
+      return updated;
+    });
+  };
+
+  const handleSettingChange = (key, field, val) => {
+    setSettings(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        [field]: val
+      }
+    }));
   };
 
   return (
@@ -148,14 +227,14 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
                 <tbody className="divide-y divide-gray-100">
                   {users.map(user => (
                     <tr key={user.id} className="hover:bg-slate-50 transition">
-                      <td className="p-4 font-bold text-slate-800">{user.name}</td>
-                      <td className="p-4 text-slate-600" dir="ltr">{user.phone}</td>
+                      <td className="p-4 font-bold text-slate-800">{user.full_name}</td>
+                      <td className="p-4 text-slate-600" dir="ltr">{user.phone_number}</td>
                       <td className="p-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${user.role === 'driver' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
-                          {user.role === 'driver' ? 'سائق' : 'معتمر'}
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${user.role === 'admin' ? 'bg-purple-100 text-purple-600' : user.role === 'driver' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                          {user.role === 'admin' ? 'مدير' : user.role === 'driver' ? 'سائق' : 'معتمر'}
                         </span>
                       </td>
-                      <td className="p-4 text-slate-500 text-sm">{user.date}</td>
+                      <td className="p-4 text-slate-500 text-sm">{new Date(user.created_at).toLocaleDateString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -221,7 +300,7 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
                     <h3 className="text-xl font-black text-slate-800 mb-2">{offer.title}</h3>
                     <p className="text-slate-500 text-sm mb-4">{offer.details}</p>
                     <div className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-500">
-                      {offer.priceDZD} د.ج <span className="text-sm font-bold text-slate-400">({(offer.priceDZD * 0.028).toFixed(2)} ريال)</span>
+                      {offer.priceDZD} د.ج <span className="text-sm font-bold text-slate-400">({(offer.priceDZD * settings.exchange_rate.dzd_to_sar).toFixed(2)} ريال)</span>
                     </div>
                   </div>
                   <div className="flex gap-3 w-full md:w-auto">
@@ -240,63 +319,113 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
 
         {/* Settings Tab */}
         {activeTab === 'settings' && (
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Social Popup Setting */}
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full opacity-10 group-hover:scale-150 transition-transform duration-500"></div>
-              
-              <div className="flex justify-between items-start mb-6 relative z-10">
-                <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center">
-                  <Smartphone size={32} />
+          <div className="space-y-8">
+            
+            {/* Exchange Rate Setting */}
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+              <h3 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2">
+                <span className="bg-green-100 text-green-600 p-2 rounded-xl"><Star size={20} /></span>
+                سعر صرف الدينار مقابل الريال
+              </h3>
+              <div className="flex items-end gap-4 max-w-md">
+                <div className="flex-1">
+                  <label className="block text-sm font-bold text-gray-500 mb-2">1 دينار جزائري يساوي (بالريال)</label>
+                  <input 
+                    type="number" 
+                    step="0.001"
+                    value={settings.exchange_rate.dzd_to_sar} 
+                    onChange={e => handleSettingChange('exchange_rate', 'dzd_to_sar', parseFloat(e.target.value))}
+                    className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-orange-500 font-bold" 
+                  />
                 </div>
-                <button 
-                  onClick={() => toggleSetting('socialPopupActive')}
-                  className={`w-14 h-8 rounded-full flex items-center p-1 transition-colors duration-300 ${settings.socialPopupActive ? 'bg-green-500' : 'bg-gray-200'}`}
-                >
-                  <div className={`w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ${settings.socialPopupActive ? '-translate-x-6' : 'translate-x-0'}`}></div>
+                <button onClick={() => saveSettings('exchange_rate')} className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-orange-500 transition flex items-center gap-2">
+                  <Save size={20} /> حفظ
                 </button>
               </div>
-              
-              <h3 className="text-2xl font-black text-slate-800 mb-3 relative z-10">نافذة التواصل الاجتماعي</h3>
-              <p className="text-slate-500 leading-relaxed relative z-10">
-                تفعيل نافذة عصرية متحركة (Animation) تظهر للمستخدمين للحث على الاشتراك في صفحات مزار على وسائل التواصل الاجتماعي.
-              </p>
-              
-              {settings.socialPopupActive && (
-                <div className="mt-6 inline-flex items-center gap-2 bg-green-50 text-green-600 px-4 py-2 rounded-xl text-sm font-bold relative z-10">
-                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                  النافذة مفعلة وتظهر للزوار
-                </div>
-              )}
             </div>
 
-            {/* Ad Popup Setting */}
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br from-orange-400 to-red-500 rounded-full opacity-10 group-hover:scale-150 transition-transform duration-500"></div>
-              
-              <div className="flex justify-between items-start mb-6 relative z-10">
-                <div className="w-16 h-16 bg-orange-50 text-orange-500 rounded-2xl flex items-center justify-center">
-                  <Megaphone size={32} />
+            <div className="grid md:grid-cols-2 gap-8">
+              {/* Social Popup Setting */}
+              <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group">
+                <div className="absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full opacity-10 group-hover:scale-150 transition-transform duration-500"></div>
+                
+                <div className="flex justify-between items-start mb-6 relative z-10">
+                  <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center">
+                    <Smartphone size={32} />
+                  </div>
+                  <button 
+                    onClick={() => toggleSetting('social_popup')}
+                    className={`w-14 h-8 rounded-full flex items-center p-1 transition-colors duration-300 ${settings.social_popup.is_active ? 'bg-green-500' : 'bg-gray-200'}`}
+                  >
+                    <div className={`w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ${settings.social_popup.is_active ? '-translate-x-6' : 'translate-x-0'}`}></div>
+                  </button>
                 </div>
-                <button 
-                  onClick={() => toggleSetting('adPopupActive')}
-                  className={`w-14 h-8 rounded-full flex items-center p-1 transition-colors duration-300 ${settings.adPopupActive ? 'bg-green-500' : 'bg-gray-200'}`}
-                >
-                  <div className={`w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ${settings.adPopupActive ? '-translate-x-6' : 'translate-x-0'}`}></div>
-                </button>
+                
+                <h3 className="text-2xl font-black text-slate-800 mb-3 relative z-10">نافذة التواصل الاجتماعي</h3>
+                <p className="text-slate-500 leading-relaxed relative z-10 mb-6">
+                  تفعيل نافذة عصرية متحركة (Animation) تظهر للمستخدمين للحث على الاشتراك في صفحات مزار.
+                </p>
+
+                <div className="space-y-4 relative z-10">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">عنوان النافذة</label>
+                    <input type="text" value={settings.social_popup.title} onChange={e => handleSettingChange('social_popup', 'title', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">النص الوصفي</label>
+                    <textarea value={settings.social_popup.description} onChange={e => handleSettingChange('social_popup', 'description', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 resize-none h-16"></textarea>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">رابط الصفحة (Link)</label>
+                    <input type="text" value={settings.social_popup.link} onChange={e => handleSettingChange('social_popup', 'link', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" dir="ltr" />
+                  </div>
+                  <button onClick={() => saveSettings('social_popup')} className="w-full bg-blue-50 text-blue-600 font-bold py-2 rounded-lg hover:bg-blue-100 transition flex justify-center items-center gap-2">
+                    <Save size={18} /> حفظ تفاصيل النافذة
+                  </button>
+                </div>
+                
               </div>
-              
-              <h3 className="text-2xl font-black text-slate-800 mb-3 relative z-10">نوافذ الإعلانات</h3>
-              <p className="text-slate-500 leading-relaxed relative z-10">
-                تفعيل ظهور نوافذ الإعلانات الترويجية للمنصة أو لشركاء مزار في واجهة المعتمرين لزيادة التفاعل.
-              </p>
-              
-              {settings.adPopupActive && (
-                <div className="mt-6 inline-flex items-center gap-2 bg-green-50 text-green-600 px-4 py-2 rounded-xl text-sm font-bold relative z-10">
-                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                  الإعلانات مفعلة حالياً
+
+              {/* Ad Popup Setting */}
+              <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group">
+                <div className="absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br from-orange-400 to-red-500 rounded-full opacity-10 group-hover:scale-150 transition-transform duration-500"></div>
+                
+                <div className="flex justify-between items-start mb-6 relative z-10">
+                  <div className="w-16 h-16 bg-orange-50 text-orange-500 rounded-2xl flex items-center justify-center">
+                    <Megaphone size={32} />
+                  </div>
+                  <button 
+                    onClick={() => toggleSetting('ad_popup')}
+                    className={`w-14 h-8 rounded-full flex items-center p-1 transition-colors duration-300 ${settings.ad_popup.is_active ? 'bg-green-500' : 'bg-gray-200'}`}
+                  >
+                    <div className={`w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ${settings.ad_popup.is_active ? '-translate-x-6' : 'translate-x-0'}`}></div>
+                  </button>
                 </div>
-              )}
+                
+                <h3 className="text-2xl font-black text-slate-800 mb-3 relative z-10">نافذة الإعلانات الترويجية</h3>
+                <p className="text-slate-500 leading-relaxed relative z-10 mb-6">
+                  تفعيل ظهور نوافذ الإعلانات الترويجية للمنصة أو لشركاء مزار في واجهة المعتمرين.
+                </p>
+
+                <div className="space-y-4 relative z-10">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">عنوان الإعلان</label>
+                    <input type="text" value={settings.ad_popup.title} onChange={e => handleSettingChange('ad_popup', 'title', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">تفاصيل الإعلان</label>
+                    <textarea value={settings.ad_popup.description} onChange={e => handleSettingChange('ad_popup', 'description', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-500 resize-none h-16"></textarea>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">رابط الصورة (اختياري)</label>
+                    <input type="text" value={settings.ad_popup.image_url} onChange={e => handleSettingChange('ad_popup', 'image_url', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-500" dir="ltr" placeholder="https://..." />
+                  </div>
+                  <button onClick={() => saveSettings('ad_popup')} className="w-full bg-orange-50 text-orange-600 font-bold py-2 rounded-lg hover:bg-orange-100 transition flex justify-center items-center gap-2">
+                    <Save size={18} /> حفظ الإعلان
+                  </button>
+                </div>
+                
+              </div>
             </div>
           </div>
         )}
