@@ -6,10 +6,8 @@ import { supabase } from '../lib/supabase';
 export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [isOnline, setIsOnline] = useState(true);
   
-  const [requests, setRequests] = useState([
-    { id: 1, pickup: 'فندق سويس أوتيل', dropoff: 'مسجد قباء', price: '800', time: 'يبعد 2 دقيقة' },
-    { id: 2, pickup: 'حي العزيزية', dropoff: 'محطة قطار الحرمين', price: '3500', time: 'يبعد 5 دقائق' },
-  ]);
+  const [requests, setRequests] = useState([]);
+  const [stats, setStats] = useState({ earnings: 0, completedRides: 0, rating: 5.0 });
   const [activeTab, setActiveTab] = useState('home'); // 'home' | 'offers'
   
   const [offers, setOffers] = useState([]);
@@ -56,6 +54,29 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       // Fetch packages and steps
       const { data: packagesData } = await supabase.from('driver_packages').select('*, package_steps(*)').eq('driver_id', currentDriverId);
       if (packagesData) setPackages(packagesData);
+
+      // Fetch pending orders for this driver to accept
+      const { data: pendingOrders } = await supabase.from('orders').select('*').eq('status', 'pending');
+      if (pendingOrders) {
+        setRequests(pendingOrders.map(o => ({
+          id: o.id,
+          pickup: o.pickup_address,
+          dropoff: o.dropoff_address,
+          price: o.total_amount,
+          time: 'جاري الحساب...'
+        })));
+      }
+
+      // Fetch completed orders for stats
+      const { data: completedOrders } = await supabase.from('orders').select('total_amount').eq('driver_id', currentDriverId).eq('status', 'delivered');
+      if (completedOrders) {
+        const totalEarnings = completedOrders.reduce((sum, order) => sum + (parseFloat(order.total_amount) || 0), 0);
+        setStats({
+          earnings: totalEarnings,
+          completedRides: completedOrders.length,
+          rating: driverData?.rating || 5.0
+        });
+      }
     }
   };
 
@@ -143,13 +164,13 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     toast.success('تم استلام الطلب! انطلق نحو العميل.');
   };
 
-  const finishRide = () => {
+  const finishRide = async () => {
+    if (activeRide) {
+      await supabase.from('orders').update({ status: 'delivered' }).eq('id', activeRide.id);
+    }
     setActiveRide(null);
     toast.success('تم إنهاء الرحلة بنجاح. أضيف الرصيد لمحفظتك.');
-    // Add dummy request back after 3 seconds
-    setTimeout(() => {
-      setRequests([{ id: 3, pickup: 'سوبر ماركت بن داود', dropoff: 'غار حراء', price: '1500', time: 'يبعد 1 دقيقة' }]);
-    }, 3000);
+    fetchDriverData(); // Refresh stats
   };
 
   return (
@@ -213,15 +234,15 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1">
             <span className="text-gray-400 text-sm font-bold mb-1">أرباح اليوم</span>
-            <span className="text-3xl font-black text-green-600">4,700 <span className="text-sm">د.ج</span></span>
+            <span className="text-3xl font-black text-green-600">{stats.earnings} <span className="text-sm">د.ج</span></span>
           </div>
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1">
             <span className="text-gray-400 text-sm font-bold mb-1">الرحلات المكتملة</span>
-            <span className="text-3xl font-black text-gray-800">5</span>
+            <span className="text-3xl font-black text-gray-800">{stats.completedRides}</span>
           </div>
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1">
             <span className="text-gray-400 text-sm font-bold mb-1">التقييم العام</span>
-            <span className="text-3xl font-black text-yellow-500">4.9 ★</span>
+            <span className="text-3xl font-black text-yellow-500">{stats.rating} ★</span>
           </div>
           <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-6 rounded-3xl shadow-md text-white flex flex-col justify-center items-center cursor-pointer hover:shadow-lg transition hover:-translate-y-1">
             <DollarSign size={28} className="mb-2 opacity-90" />
