@@ -60,25 +60,37 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   };
 
   useEffect(() => {
-    let interval;
-    if (currentOrderId && (rideStatus === 'requesting' || rideStatus === 'driver_offered')) {
-      interval = setInterval(async () => {
-        const { data } = await supabase.from('orders').select('*, drivers(users(full_name))').eq('id', currentOrderId).single();
-        if (data) {
-          if (data.status === 'driver_offered') {
-            setRideStatus('driver_offered');
-            setOfferedRide(data);
-          } else if (data.status === 'accepted') {
-            setRideStatus('active');
-            setOfferedRide(data);
-          } else if (data.status === 'pending') {
-            setRideStatus('requesting');
+    if (!currentOrderId) return;
+    
+    // Listen for real-time updates on this specific order
+    const subscription = supabase
+      .channel(`order_${currentOrderId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${currentOrderId}` },
+        async (payload) => {
+          const updatedOrder = payload.new;
+          // When order status changes, fetch full details to get driver name
+          const { data } = await supabase.from('orders').select('*, drivers(users(full_name))').eq('id', currentOrderId).single();
+          if (data) {
+            if (data.status === 'driver_offered') {
+              setRideStatus('driver_offered');
+              setOfferedRide(data);
+            } else if (data.status === 'accepted') {
+              setRideStatus('active');
+              setOfferedRide(data);
+            } else if (data.status === 'pending') {
+              setRideStatus('requesting');
+            }
           }
         }
-      }, 3000);
-    }
-    return () => clearInterval(interval);
-  }, [currentOrderId, rideStatus]);
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, [currentOrderId]);
 
   const handleRequestRide = async (type = 'search', predefinedData = null) => {
     let finalPickup = pickup;

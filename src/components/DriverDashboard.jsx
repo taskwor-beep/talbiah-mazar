@@ -104,14 +104,28 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     }
   };
 
-  // Poll for updates every 3 seconds (to see if pilgrim accepted)
+  // Listen for real-time updates on orders table
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (driverId && isOnline) {
-        fetchDriverData();
-      }
-    }, 3000);
-    return () => clearInterval(interval);
+    if (!driverId || !isOnline) return;
+    
+    // Initial fetch
+    fetchDriverData();
+
+    const subscription = supabase
+      .channel('driver_orders_channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        (payload) => {
+          // Whenever ANY order changes, refreshes the driver's screen (requests & active ride)
+          fetchDriverData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
   }, [driverId, isOnline]);
 
   const addOffer = async (e) => {
