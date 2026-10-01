@@ -130,7 +130,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
         pickup_address: finalPickup,
         dropoff_address: finalDropoff,
         status: targetDriverId ? 'pending_driver_approval' : 'pending',
-        total_amount: price,
+        total_amount: price || 0,
         pickup_latitude: locationCoords?.lat,
         pickup_longitude: locationCoords?.lng
       }]).select();
