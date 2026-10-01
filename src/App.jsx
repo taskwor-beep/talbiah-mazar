@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
-import { MapPin, Navigation, Car, ShieldCheck, Wallet, ChevronLeft, Search, Star } from 'lucide-react';
+import { MapPin, Navigation, Car, ShieldCheck, Wallet, Search, Star, X } from 'lucide-react';
 
 export default function App() {
   const [pickup, setPickup] = useState('');
   const [dropoff, setDropoff] = useState('');
+  
+  // Auth Modal State
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authType, setAuthType] = useState('pilgrim_login'); // 'pilgrim_login' | 'driver_register'
 
   const mazarat = [
     { name: 'غار حراء', price: '1500', rating: '4.9' },
@@ -11,11 +15,20 @@ export default function App() {
     { name: 'مسجد قباء (المدينة)', price: '800', rating: '5.0' },
   ];
 
+  const openAuthModal = (type) => {
+    setAuthType(type);
+    setIsAuthModalOpen(true);
+  };
+
+  const closeAuthModal = () => {
+    setIsAuthModalOpen(false);
+  };
+
   return (
     <div className="min-h-screen font-sans text-gray-900 bg-orange-50 selection:bg-orange-200">
       
       {/* Navbar */}
-      <nav className="absolute top-0 w-full z-50 p-6 flex justify-between items-center max-w-7xl mx-auto left-0 right-0">
+      <nav className="absolute top-0 w-full z-40 p-6 flex justify-between items-center max-w-7xl mx-auto left-0 right-0">
         <div className="flex items-center gap-2">
           <div className="bg-gradient-to-br from-red-600 to-orange-500 p-2 rounded-xl text-white shadow-lg">
             <Navigation size={28} />
@@ -25,8 +38,16 @@ export default function App() {
           </span>
         </div>
         <div className="flex items-center gap-4">
-          <button className="text-gray-700 font-bold hover:text-orange-600 transition">انضم كسائق</button>
-          <button className="bg-white text-orange-600 px-5 py-2.5 rounded-full font-bold shadow-md hover:shadow-lg transition">
+          <button 
+            onClick={() => openAuthModal('driver_register')}
+            className="text-gray-700 font-bold hover:text-orange-600 transition"
+          >
+            انضم كسائق
+          </button>
+          <button 
+            onClick={() => openAuthModal('pilgrim_login')}
+            className="bg-white text-orange-600 px-5 py-2.5 rounded-full font-bold shadow-md hover:shadow-lg transition"
+          >
             تسجيل الدخول
           </button>
         </div>
@@ -169,6 +190,90 @@ export default function App() {
           </div>
         </div>
       </section>
+
+      {/* Auth Modal */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeAuthModal}></div>
+          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 overflow-hidden">
+            {/* Decorative background in modal */}
+            <div className="absolute top-0 right-0 w-full h-32 bg-gradient-to-r from-red-500 to-orange-500 opacity-10"></div>
+            
+            <button 
+              onClick={closeAuthModal}
+              className="absolute top-4 left-4 p-2 text-gray-400 hover:text-gray-700 bg-gray-50 rounded-full transition-colors"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="relative z-10">
+              <h2 className="text-2xl font-black mb-2 text-gray-900">
+                {authType === 'pilgrim_login' ? 'تسجيل دخول المعتمر' : 'انضم إلينا كسائق'}
+              </h2>
+              <p className="text-gray-500 text-sm mb-6">
+                {authType === 'pilgrim_login' 
+                  ? 'سجل دخولك لحجز رحلتك بكل سهولة وتتبعها.' 
+                  : 'ابدأ بجني الأرباح وتقديم خدمة راقية لضيوف الرحمن.'}
+              </p>
+
+              <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+                {authType === 'driver_register' && (
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">الاسم الكامل</label>
+                    <input 
+                      type="text" 
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition"
+                      placeholder="أدخل اسمك الكامل"
+                    />
+                  </div>
+                )}
+                
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">رقم الهاتف</label>
+                  <input 
+                    type="tel" 
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition text-left"
+                    placeholder="+966 5X XXX XXXX"
+                    dir="ltr"
+                  />
+                </div>
+
+                {authType === 'driver_register' && (
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">نوع السيارة</label>
+                    <select className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition">
+                      <option>سيدان (4 ركاب)</option>
+                      <option>عائلية (7 ركاب)</option>
+                      <option>باص صغير (12 راكب)</option>
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">كلمة المرور</label>
+                  <input 
+                    type="password" 
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition"
+                    placeholder="********"
+                  />
+                </div>
+
+                <button className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-bold text-lg py-3 rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all mt-4">
+                  {authType === 'pilgrim_login' ? 'دخول' : 'تسجيل حساب جديد'}
+                </button>
+              </form>
+
+              <div className="mt-6 text-center text-sm text-gray-500">
+                {authType === 'pilgrim_login' ? (
+                  <>ليس لديك حساب؟ <button className="text-orange-600 font-bold hover:underline">سجل الآن</button></>
+                ) : (
+                  <>لديك حساب مسبقاً؟ <button onClick={() => setAuthType('pilgrim_login')} className="text-orange-600 font-bold hover:underline">سجل الدخول</button></>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
