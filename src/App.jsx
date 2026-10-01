@@ -5,6 +5,7 @@ import { supabase } from './lib/supabase';
 import PilgrimDashboard from './components/PilgrimDashboard';
 import DriverDashboard from './components/DriverDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import GlobalPopups from './components/GlobalPopups';
 
 export default function App() {
   const [pickup, setPickup] = useState('');
@@ -105,6 +106,7 @@ export default function App() {
     return (
       <>
         <Toaster />
+        <GlobalPopups userRole={userRole} />
         {userRole === 'admin' ? (
           <AdminDashboard userName={userName || 'مدير النظام'} onLogout={handleLogout} onGoHome={() => setCurrentView('landing')} />
         ) : userRole === 'driver' ? (

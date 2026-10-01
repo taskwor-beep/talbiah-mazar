@@ -12,8 +12,8 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
   
   const [settings, setSettings] = useState({
     exchange_rate: { dzd_to_sar: 0.028 },
-    social_popup: { is_active: false, title: "تابعنا على المنصات الاجتماعية!", description: "اشترك الآن ليصلك كل جديد عن عروض مزار.", link: "https://twitter.com" },
-    ad_popup: { is_active: true, title: "إعلان هام", description: "احجز باقتك الآن واحصل على خصم 10% بمناسبة الموسم!", image_url: "" }
+    social_popup: { is_active: false, title: "تابعنا على المنصات الاجتماعية!", description: "اشترك الآن ليصلك كل جديد عن عروض مزار.", link: "https://twitter.com", frequency: 'once', version: 1 },
+    ad_popup: { is_active: true, title: "إعلان هام", description: "احجز باقتك الآن واحصل على خصم 10% بمناسبة الموسم!", image_url: "", frequency: 'always', version: 1 }
   });
   
   const [loading, setLoading] = useState(true);
@@ -115,6 +115,17 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
       // Save to DB immediately
       supabase.from('admin_settings').update({ value: updated[key] }).eq('key', key).then(() => {
         toast.success(updated[key].is_active ? 'تم التفعيل' : 'تم الإيقاف');
+      });
+      return updated;
+    });
+  };
+
+  const resetCounter = (key) => {
+    setSettings(prev => {
+      const currentVersion = prev[key].version || 1;
+      const updated = { ...prev, [key]: { ...prev[key], version: currentVersion + 1 } };
+      supabase.from('admin_settings').update({ value: updated[key] }).eq('key', key).then(() => {
+        toast.success('تم تصفير العداد! ستظهر النافذة للجميع مجدداً.');
       });
       return updated;
     });
@@ -379,9 +390,21 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
                     <label className="block text-xs font-bold text-gray-500 mb-1">رابط الصفحة (Link)</label>
                     <input type="text" value={settings.social_popup.link} onChange={e => handleSettingChange('social_popup', 'link', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" dir="ltr" />
                   </div>
-                  <button onClick={() => saveSettings('social_popup')} className="w-full bg-blue-50 text-blue-600 font-bold py-2 rounded-lg hover:bg-blue-100 transition flex justify-center items-center gap-2">
-                    <Save size={18} /> حفظ تفاصيل النافذة
-                  </button>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">تكرار الظهور</label>
+                    <select value={settings.social_popup.frequency || 'once'} onChange={e => handleSettingChange('social_popup', 'frequency', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
+                      <option value="once">مرة واحدة فقط لكل مستخدم</option>
+                      <option value="always">في كل مرة يفتح فيها التطبيق</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => saveSettings('social_popup')} className="flex-1 bg-blue-50 text-blue-600 font-bold py-2 rounded-lg hover:bg-blue-100 transition flex justify-center items-center gap-2">
+                      <Save size={18} /> حفظ
+                    </button>
+                    <button onClick={() => resetCounter('social_popup')} className="flex-1 bg-purple-50 text-purple-600 font-bold py-2 rounded-lg hover:bg-purple-100 transition flex justify-center items-center gap-2">
+                      تصفير العداد
+                    </button>
+                  </div>
                 </div>
                 
               </div>
@@ -420,9 +443,21 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
                     <label className="block text-xs font-bold text-gray-500 mb-1">رابط الصورة (اختياري)</label>
                     <input type="text" value={settings.ad_popup.image_url} onChange={e => handleSettingChange('ad_popup', 'image_url', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-500" dir="ltr" placeholder="https://..." />
                   </div>
-                  <button onClick={() => saveSettings('ad_popup')} className="w-full bg-orange-50 text-orange-600 font-bold py-2 rounded-lg hover:bg-orange-100 transition flex justify-center items-center gap-2">
-                    <Save size={18} /> حفظ الإعلان
-                  </button>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">تكرار الظهور</label>
+                    <select value={settings.ad_popup.frequency || 'always'} onChange={e => handleSettingChange('ad_popup', 'frequency', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-500">
+                      <option value="once">مرة واحدة فقط لكل مستخدم</option>
+                      <option value="always">في كل مرة يفتح فيها التطبيق</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => saveSettings('ad_popup')} className="flex-1 bg-orange-50 text-orange-600 font-bold py-2 rounded-lg hover:bg-orange-100 transition flex justify-center items-center gap-2">
+                      <Save size={18} /> حفظ الإعلان
+                    </button>
+                    <button onClick={() => resetCounter('ad_popup')} className="flex-1 bg-red-50 text-red-600 font-bold py-2 rounded-lg hover:bg-red-100 transition flex justify-center items-center gap-2">
+                      تصفير العداد
+                    </button>
+                  </div>
                 </div>
                 
               </div>
