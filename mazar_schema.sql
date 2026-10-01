@@ -3,7 +3,7 @@
 -- ====================================================================
 
 -- 1. Users Table (Customers)
-CREATE TABLE public.users (
+CREATE TABLE IF NOT EXISTS public.users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     full_name TEXT NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE public.users (
 );
 
 -- 2. Drivers Table (Couriers)
-CREATE TABLE public.drivers (
+CREATE TABLE IF NOT EXISTS public.drivers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
@@ -31,7 +31,7 @@ CREATE TABLE public.drivers (
 );
 
 -- 3. Restaurants / Stores Table
-CREATE TABLE public.stores (
+CREATE TABLE IF NOT EXISTS public.stores (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     name TEXT NOT NULL,
@@ -44,7 +44,7 @@ CREATE TABLE public.stores (
 );
 
 -- 4. Orders Table
-CREATE TABLE public.orders (
+CREATE TABLE IF NOT EXISTS public.orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     customer_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
@@ -70,7 +70,7 @@ CREATE TABLE public.orders (
 );
 
 -- 5. Order Items
-CREATE TABLE public.order_items (
+CREATE TABLE IF NOT EXISTS public.order_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID REFERENCES public.orders(id) ON DELETE CASCADE,
     item_name TEXT NOT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE public.order_items (
 );
 
 -- 6. Delivery Tracking (Optional for history/live tracking)
-CREATE TABLE public.delivery_tracking (
+CREATE TABLE IF NOT EXISTS public.delivery_tracking (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID REFERENCES public.orders(id) ON DELETE CASCADE,
     driver_id UUID REFERENCES public.drivers(id) ON DELETE CASCADE,
@@ -90,7 +90,7 @@ CREATE TABLE public.delivery_tracking (
 );
 
 -- 7. Admin Settings
-CREATE TABLE public.admin_settings (
+CREATE TABLE IF NOT EXISTS public.admin_settings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     key TEXT UNIQUE NOT NULL,
     value JSONB NOT NULL,
@@ -101,10 +101,11 @@ CREATE TABLE public.admin_settings (
 INSERT INTO public.admin_settings (key, value) VALUES 
 ('exchange_rate', '{"dzd_to_sar": 0.028}'::jsonb),
 ('social_popup', '{"is_active": false, "title": "تابعنا على المنصات الاجتماعية!", "description": "اشترك الآن ليصلك كل جديد عن عروض مزار.", "link": "https://twitter.com"}'::jsonb),
-('ad_popup', '{"is_active": true, "title": "إعلان هام", "description": "احجز باقتك الآن واحصل على خصم 10% بمناسبة الموسم!", "image_url": ""}'::jsonb);
+('ad_popup', '{"is_active": true, "title": "إعلان هام", "description": "احجز باقتك الآن واحصل على خصم 10% بمناسبة الموسم!", "image_url": ""}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
 
 -- 8. Driver Offers
-CREATE TABLE public.driver_offers (
+CREATE TABLE IF NOT EXISTS public.driver_offers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     driver_id UUID REFERENCES public.drivers(id) ON DELETE CASCADE,
@@ -115,7 +116,7 @@ CREATE TABLE public.driver_offers (
 );
 
 -- 9. Driver Packages
-CREATE TABLE public.driver_packages (
+CREATE TABLE IF NOT EXISTS public.driver_packages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     driver_id UUID REFERENCES public.drivers(id) ON DELETE CASCADE,
@@ -127,7 +128,7 @@ CREATE TABLE public.driver_packages (
 );
 
 -- 10. Package Steps (Timeline)
-CREATE TABLE public.package_steps (
+CREATE TABLE IF NOT EXISTS public.package_steps (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     package_id UUID REFERENCES public.driver_packages(id) ON DELETE CASCADE,
     step_order INTEGER NOT NULL,
