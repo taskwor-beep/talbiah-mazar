@@ -23,7 +23,8 @@ CREATE TABLE public.drivers (
     rating DECIMAL(3,2) DEFAULT 5.00,
     total_deliveries INTEGER DEFAULT 0,
     is_online BOOLEAN DEFAULT FALSE,
-    current_location GEOGRAPHY(POINT) -- Requires PostGIS extension
+    current_latitude DOUBLE PRECISION,
+    current_longitude DOUBLE PRECISION
 );
 
 -- 3. Restaurants / Stores Table
@@ -33,7 +34,8 @@ CREATE TABLE public.stores (
     name TEXT NOT NULL,
     description TEXT,
     location_address TEXT NOT NULL,
-    location_coords GEOGRAPHY(POINT),
+    location_latitude DOUBLE PRECISION,
+    location_longitude DOUBLE PRECISION,
     contact_phone TEXT,
     is_active BOOLEAN DEFAULT TRUE
 );
@@ -50,8 +52,10 @@ CREATE TABLE public.orders (
     
     pickup_address TEXT NOT NULL,
     dropoff_address TEXT NOT NULL,
-    pickup_coords GEOGRAPHY(POINT),
-    dropoff_coords GEOGRAPHY(POINT),
+    pickup_latitude DOUBLE PRECISION,
+    pickup_longitude DOUBLE PRECISION,
+    dropoff_latitude DOUBLE PRECISION,
+    dropoff_longitude DOUBLE PRECISION,
     
     delivery_fee DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
@@ -77,6 +81,7 @@ CREATE TABLE public.delivery_tracking (
     order_id UUID REFERENCES public.orders(id) ON DELETE CASCADE,
     driver_id UUID REFERENCES public.drivers(id) ON DELETE CASCADE,
     recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    location GEOGRAPHY(POINT) NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
     status TEXT
 );
