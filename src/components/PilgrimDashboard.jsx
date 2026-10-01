@@ -8,12 +8,13 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [selectedPackage, setSelectedPackage] = useState(null);
 
   const [availablePackages, setAvailablePackages] = useState([]);
+  const [availableOffers, setAvailableOffers] = useState([]);
 
   useEffect(() => {
-    fetchPackages();
+    fetchData();
   }, []);
 
-  const fetchPackages = async () => {
+  const fetchData = async () => {
     // Fetch approved packages with their nested steps and driver details
     const { data, error } = await supabase
       .from('driver_packages')
@@ -41,6 +42,15 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
         })) || []
       }));
       setAvailablePackages(mappedPackages);
+    }
+
+    const { data: offersData } = await supabase
+      .from('driver_offers')
+      .select('*, drivers(users(full_name))')
+      .eq('status', 'approved');
+      
+    if (offersData) {
+      setAvailableOffers(offersData);
     }
   };
 
@@ -170,10 +180,38 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
               )}
             </div>
 
+            {/* Offers Section */}
+            {rideStatus === 'idle' && availableOffers.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-2xl font-black mb-4 text-gray-800">أحدث عروض التوصيل المباشرة</h2>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {availableOffers.map(offer => (
+                    <div key={offer.id} className="bg-white border border-gray-100 rounded-3xl p-6 hover:shadow-md transition hover:-translate-y-1 relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-1 h-full bg-blue-500"></div>
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-xs font-bold">عرض توصيل</span>
+                        <span className="text-xs text-gray-400 font-bold bg-gray-50 px-2 py-1 rounded-lg">السائق {offer.drivers?.users?.full_name}</span>
+                      </div>
+                      <h3 className="font-black text-xl text-gray-800 mb-2">{offer.title}</h3>
+                      <p className="text-gray-500 text-sm mb-4 leading-relaxed">{offer.details}</p>
+                      <div className="flex items-center justify-between border-t border-gray-100 pt-4">
+                        <span className="font-black text-blue-600 text-lg">{offer.price_dzd} د.ج</span>
+                        <button onClick={() => {
+                          setRideStatus('requesting');
+                          toast.success('جاري طلب العرض من السائق...');
+                          setTimeout(() => setRideStatus('active'), 2000);
+                        }} className="bg-blue-600 text-white px-5 py-2 rounded-xl font-bold text-sm hover:bg-blue-700 hover:shadow-lg transition">طلب التوصيلة</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Packages Section */}
-            {rideStatus === 'idle' && (
+            {rideStatus === 'idle' && availablePackages.length > 0 && (
               <div>
-                <h2 className="text-2xl font-black mb-4 text-gray-800">أو اختر من الباقات الجاهزة</h2>
+                <h2 className="text-2xl font-black mb-4 text-gray-800">أو اختر من الباقات الجاهزة (جولات كاملة)</h2>
                 <div className="grid sm:grid-cols-2 gap-4">
                   {availablePackages.map(pkg => (
                     <div 

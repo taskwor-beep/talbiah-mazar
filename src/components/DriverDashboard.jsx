@@ -13,6 +13,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [offers, setOffers] = useState([]);
   const [packages, setPackages] = useState([]);
   const [driverId, setDriverId] = useState(null);
+  const [driverStatus, setDriverStatus] = useState('approved');
   
   // New Offer State
   const [newOffer, setNewOffer] = useState({ title: '', priceDZD: '', details: '' });
@@ -34,8 +35,11 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     let currentDriverId = null;
     
     if (userData) {
-      const { data: driverData } = await supabase.from('drivers').select('id').eq('user_id', userData.id).single();
-      if (driverData) currentDriverId = driverData.id;
+      const { data: driverData } = await supabase.from('drivers').select('id, status').eq('user_id', userData.id).single();
+      if (driverData) {
+        currentDriverId = driverData.id;
+        setDriverStatus(driverData.status);
+      }
     }
     
     // Fallback if not found
@@ -173,6 +177,29 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     fetchDriverData(); // Refresh stats
   };
 
+  const handleWalletClick = () => {
+    toast.success('تم إرسال طلب سحب الرصيد إلى الإدارة للمراجعة.');
+  };
+
+  if (driverStatus === 'pending') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 font-sans" dir="rtl">
+        <div className="bg-white max-w-md w-full rounded-3xl shadow-xl p-8 text-center">
+          <div className="w-24 h-24 bg-orange-100 text-orange-500 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Car size={48} />
+          </div>
+          <h2 className="text-2xl font-black text-gray-800 mb-4">حسابك قيد المراجعة</h2>
+          <p className="text-gray-500 mb-8 leading-relaxed">
+            مرحباً بك في مزار كابتن! فريق الإدارة يقوم حالياً بمراجعة طلب انضمامك. ستتمكن من الدخول للوحة التحكم واستقبال الطلبات فور الموافقة على حسابك.
+          </p>
+          <button onClick={onLogout} className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-black transition">
+            تسجيل الخروج
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen bg-gray-50 font-sans text-gray-900" dir="rtl">
       
@@ -244,7 +271,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
             <span className="text-gray-400 text-sm font-bold mb-1">التقييم العام</span>
             <span className="text-3xl font-black text-yellow-500">{stats.rating} ★</span>
           </div>
-          <div className="bg-gradient-to-br from-green-500 to-emerald-600 p-6 rounded-3xl shadow-md text-white flex flex-col justify-center items-center cursor-pointer hover:shadow-lg transition hover:-translate-y-1">
+          <div onClick={handleWalletClick} className="bg-gradient-to-br from-green-500 to-emerald-600 p-6 rounded-3xl shadow-md text-white flex flex-col justify-center items-center cursor-pointer hover:shadow-lg transition hover:-translate-y-1">
             <DollarSign size={28} className="mb-2 opacity-90" />
             <span className="font-bold text-lg">سحب الرصيد</span>
           </div>
