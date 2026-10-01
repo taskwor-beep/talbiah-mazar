@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { MapPin, Navigation, Car, ShieldCheck, Wallet, Search, Star, X } from 'lucide-react';
+import { MapPin, Navigation, Car, ShieldCheck, Wallet, Search, Star, X, User } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function App() {
   const [pickup, setPickup] = useState('');
@@ -7,7 +8,9 @@ export default function App() {
   
   // Auth Modal State
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authType, setAuthType] = useState('pilgrim_login'); // 'pilgrim_login' | 'driver_register'
+  const [authType, setAuthType] = useState('pilgrim_login'); // 'pilgrim_login' | 'driver_register' | 'pilgrim_register'
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userName, setUserName] = useState('');
 
   const mazarat = [
     { name: 'غار حراء', price: '1500', rating: '4.9' },
@@ -24,8 +27,22 @@ export default function App() {
     setIsAuthModalOpen(false);
   };
 
+  const handleAuthSubmit = (e) => {
+    e.preventDefault();
+    // Simulate auth success
+    const nameInput = e.target.querySelector('input[type="text"]');
+    setUserName(nameInput && nameInput.value ? nameInput.value : 'مستخدم مزار');
+    setIsLoggedIn(true);
+    closeAuthModal();
+    toast.success(
+      authType === 'pilgrim_login' ? 'تم تسجيل الدخول بنجاح!' : 'تم إنشاء الحساب بنجاح!',
+      { position: 'top-center' }
+    );
+  };
+
   return (
     <div className="min-h-screen font-sans text-gray-900 bg-orange-50 selection:bg-orange-200">
+      <Toaster />
       
       {/* Navbar */}
       <nav className="absolute top-0 w-full z-40 p-6 flex justify-between items-center max-w-7xl mx-auto left-0 right-0">
@@ -38,18 +55,35 @@ export default function App() {
           </span>
         </div>
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => openAuthModal('driver_register')}
-            className="text-gray-700 font-bold hover:text-orange-600 transition"
-          >
-            انضم كسائق
-          </button>
-          <button 
-            onClick={() => openAuthModal('pilgrim_login')}
-            className="bg-white text-orange-600 px-5 py-2.5 rounded-full font-bold shadow-md hover:shadow-lg transition"
-          >
-            تسجيل الدخول
-          </button>
+          {isLoggedIn ? (
+            <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full shadow-sm border border-orange-100">
+              <div className="bg-orange-100 p-1.5 rounded-full text-orange-600">
+                <User size={20} />
+              </div>
+              <span className="font-bold text-gray-800">{userName}</span>
+              <button 
+                onClick={() => { setIsLoggedIn(false); toast('تم تسجيل الخروج'); }}
+                className="text-sm text-red-500 font-bold ml-2 border-l pl-2 border-gray-200 hover:text-red-700 transition"
+              >
+                خروج
+              </button>
+            </div>
+          ) : (
+            <>
+              <button 
+                onClick={() => openAuthModal('driver_register')}
+                className="text-gray-700 font-bold hover:text-orange-600 transition"
+              >
+                انضم كسائق
+              </button>
+              <button 
+                onClick={() => openAuthModal('pilgrim_login')}
+                className="bg-white text-orange-600 px-5 py-2.5 rounded-full font-bold shadow-md hover:shadow-lg transition"
+              >
+                تسجيل الدخول
+              </button>
+            </>
+          )}
         </div>
       </nav>
 
@@ -219,7 +253,7 @@ export default function App() {
                   : 'ابدأ بجني الأرباح وتقديم خدمة راقية لضيوف الرحمن.'}
               </p>
 
-              <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+              <form className="space-y-4" onSubmit={handleAuthSubmit}>
                 {(authType === 'driver_register' || authType === 'pilgrim_register') && (
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">الاسم الكامل</label>
