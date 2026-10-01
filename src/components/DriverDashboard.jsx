@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function DriverDashboard({ userName, onLogout }) {
+export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [isOnline, setIsOnline] = useState(true);
   
   const [requests, setRequests] = useState([
@@ -31,7 +31,7 @@ export default function DriverDashboard({ userName, onLogout }) {
       
       {/* Sidebar */}
       <aside className="w-64 bg-white border-l border-gray-100 p-6 flex flex-col fixed md:relative z-20 h-full hidden md:flex shadow-sm">
-        <div className="flex items-center gap-3 mb-10">
+        <div className="flex items-center gap-3 mb-10 cursor-pointer hover:opacity-80 transition" onClick={onGoHome}>
           <div className="bg-gradient-to-br from-gray-800 to-black p-2 rounded-xl text-white shadow-md">
             <Car size={24} />
           </div>
@@ -71,7 +71,7 @@ export default function DriverDashboard({ userName, onLogout }) {
       {/* Main Area */}
       <main className="flex-1 p-4 md:p-8 h-screen overflow-y-auto">
         <div className="flex justify-between items-center mb-8 bg-white p-4 rounded-3xl shadow-sm border border-gray-100 md:hidden">
-           <span className="text-xl font-black text-gray-800">مزار كابتن</span>
+           <span className="text-xl font-black text-gray-800 cursor-pointer" onClick={onGoHome}>مزار كابتن</span>
            <button onClick={onLogout} className="text-red-500"><LogOut size={20} /></button>
         </div>
 

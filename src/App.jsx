@@ -13,6 +13,7 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authType, setAuthType] = useState('pilgrim_login'); // 'pilgrim_login' | 'driver_register' | 'pilgrim_register'
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentView, setCurrentView] = useState('landing');
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('pilgrim');
 
@@ -60,6 +61,7 @@ export default function App() {
         setUserName(data.full_name);
         setUserRole(data.role);
         setIsLoggedIn(true);
+        setCurrentView('dashboard');
         closeAuthModal();
         toast.success('تم إنشاء الحساب بنجاح!', { id: toastId });
       } else {
@@ -74,6 +76,7 @@ export default function App() {
          setUserName(data.full_name);
          setUserRole(data.role);
          setIsLoggedIn(true);
+         setCurrentView('dashboard');
          closeAuthModal();
          toast.success('تم تسجيل الدخول بنجاح!', { id: toastId });
       }
@@ -84,18 +87,19 @@ export default function App() {
 
   const handleLogout = () => {
     setIsLoggedIn(false);
+    setCurrentView('landing');
     setUserName('');
     toast('تم تسجيل الخروج');
   };
 
-  if (isLoggedIn) {
+  if (isLoggedIn && currentView === 'dashboard') {
     return (
       <>
         <Toaster />
         {userRole === 'driver' ? (
-          <DriverDashboard userName={userName} onLogout={handleLogout} />
+          <DriverDashboard userName={userName} onLogout={handleLogout} onGoHome={() => setCurrentView('landing')} />
         ) : (
-          <PilgrimDashboard userName={userName} onLogout={handleLogout} />
+          <PilgrimDashboard userName={userName} onLogout={handleLogout} onGoHome={() => setCurrentView('landing')} />
         )}
       </>
     );
@@ -115,19 +119,42 @@ export default function App() {
             مزار
           </span>
         </div>
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => openAuthModal('driver_register')}
-            className="text-gray-700 font-bold hover:text-orange-600 transition"
-          >
-            انضم كسائق
-          </button>
-          <button 
-            onClick={() => openAuthModal('pilgrim_login')}
-            className="bg-white text-orange-600 px-5 py-2.5 rounded-full font-bold shadow-md hover:shadow-lg transition"
-          >
-            تسجيل الدخول
-          </button>
+        <div className="flex items-center gap-2 sm:gap-4">
+          {isLoggedIn ? (
+            <div className="flex items-center gap-2 sm:gap-3 bg-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full shadow-sm border border-orange-100">
+              <button 
+                onClick={() => setCurrentView('dashboard')}
+                className="flex items-center gap-2 hover:opacity-80 transition"
+              >
+                <div className="bg-orange-100 p-1 sm:p-1.5 rounded-full text-orange-600">
+                  <User size={16} className="sm:w-5 sm:h-5" />
+                </div>
+                <span className="font-bold text-gray-800 text-xs sm:text-base hidden sm:block">لوحة التحكم</span>
+                <span className="font-bold text-gray-800 text-xs sm:hidden">لوحتي</span>
+              </button>
+              <button 
+                onClick={handleLogout}
+                className="text-xs sm:text-sm text-red-500 font-bold ml-1 sm:ml-2 border-l pl-2 sm:pl-3 border-gray-200 hover:text-red-700 transition"
+              >
+                خروج
+              </button>
+            </div>
+          ) : (
+            <>
+              <button 
+                onClick={() => openAuthModal('driver_register')}
+                className="text-gray-700 font-bold text-xs sm:text-base hover:text-orange-600 transition"
+              >
+                انضم كسائق
+              </button>
+              <button 
+                onClick={() => openAuthModal('pilgrim_login')}
+                className="bg-white text-orange-600 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-base shadow-md hover:shadow-lg transition"
+              >
+                تسجيل الدخول
+              </button>
+            </>
+          )}
         </div>
       </nav>
 
