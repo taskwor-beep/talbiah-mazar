@@ -233,9 +233,13 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const acceptRide = async (ride) => {
     if (ride.price !== 'قابل للتفاوض' && ride.price > 0) {
       // It's a pre-priced offer or package, accept directly
-      await supabase.from('orders').update({ driver_id: driverId, status: 'accepted' }).eq('id', ride.id);
-      toast.success('تم استلام الطلب! انطلق نحو العميل.');
-      fetchDriverData();
+      const { error } = await supabase.from('orders').update({ driver_id: driverId, status: 'accepted' }).eq('id', ride.id);
+      if (error) {
+        toast.error('خطأ من قاعدة البيانات: ' + error.message);
+      } else {
+        toast.success('تم استلام الطلب! انطلق نحو العميل.');
+        fetchDriverData();
+      }
     } else {
       // Custom ride, show custom modal
       setPricePrompt(ride);
@@ -246,15 +250,20 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const submitPriceOffer = async (e) => {
     e.preventDefault();
     if (newOfferPrice && !isNaN(newOfferPrice) && Number(newOfferPrice) > 0) {
-      await supabase.from('orders').update({ 
+      const { error } = await supabase.from('orders').update({ 
         driver_id: driverId, 
         status: 'driver_offered', 
         total_amount: parseFloat(newOfferPrice) 
       }).eq('id', pricePrompt.id);
-      toast.success('تم إرسال عرضك للمعتمر! في انتظار موافقته.');
-      setPricePrompt(null);
-      setNewOfferPrice('');
-      fetchDriverData();
+      
+      if (error) {
+        toast.error('خطأ من قاعدة البيانات: ' + error.message);
+      } else {
+        toast.success('تم إرسال عرضك للمعتمر! في انتظار موافقته.');
+        setPricePrompt(null);
+        setNewOfferPrice('');
+        fetchDriverData();
+      }
     } else {
       toast.error('الرجاء إدخال سعر صحيح أكبر من الصفر.');
     }

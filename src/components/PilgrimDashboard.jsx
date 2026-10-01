@@ -153,7 +153,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).single();
     
     if (userData) {
-      const { data } = await supabase.from('orders').insert([{
+      const { data, error } = await supabase.from('orders').insert([{
         customer_id: userData.id,
         driver_id: targetDriverId,
         pickup_address: finalPickup,
@@ -163,6 +163,12 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
         pickup_latitude: locationCoords?.lat,
         pickup_longitude: locationCoords?.lng
       }]).select();
+      
+      if (error) {
+        toast.error('خطأ في إنشاء الطلب: ' + error.message);
+        setRideStatus('idle');
+        return;
+      }
       
       if (data && data.length > 0) {
         setCurrentOrderId(data[0].id);
@@ -178,7 +184,11 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   };
 
   const rejectOffer = async () => {
-    await supabase.from('orders').update({ status: 'pending', driver_id: null, total_amount: 0 }).eq('id', currentOrderId);
+    const { error } = await supabase.from('orders').update({ status: 'pending', driver_id: null, total_amount: 0 }).eq('id', currentOrderId);
+    if (error) {
+      toast.error('خطأ: ' + error.message);
+      return;
+    }
     setRideStatus('requesting');
     setOfferedRide(null);
     toast.error('تم رفض العرض، ننتظر عرضاً من سائق آخر...');
@@ -187,7 +197,11 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const cancelRequest = async () => {
     if (!currentOrderId) return;
     // Set to cancelled so drivers know it's no longer available
-    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', currentOrderId);
+    const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', currentOrderId);
+    if (error) {
+      toast.error('خطأ: ' + error.message);
+      return;
+    }
     setRideStatus('idle');
     setOfferedRide(null);
     setCurrentOrderId(null);
