@@ -27,6 +27,8 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     steps: [{ title: '', startTime: '', endTime: '', priceDZD: '' }] 
   });
 
+  const activeRideRef = React.useRef(null);
+
   useEffect(() => {
     fetchDriverData();
   }, [userName]);
@@ -64,7 +66,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       // Check for active ride (driver_offered or accepted)
       const { data: activeOrder } = await supabase.from('orders').select('*, users!orders_customer_id_fkey(full_name, phone_number)').eq('driver_id', currentDriverId).in('status', ['driver_offered', 'accepted']).single();
       if (activeOrder) {
-        setActiveRide({
+        const newActiveRide = {
           id: activeOrder.id,
           pickup: activeOrder.pickup_address,
           dropoff: activeOrder.dropoff_address,
@@ -73,9 +75,18 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
           lat: activeOrder.pickup_latitude,
           lng: activeOrder.pickup_longitude,
           customerName: activeOrder.users?.full_name
-        });
+        };
+        setActiveRide(newActiveRide);
+        activeRideRef.current = newActiveRide;
       } else {
+        if (activeRideRef.current && activeRideRef.current.status === 'driver_offered') {
+          toast.error('قام المعتمر برفض السعر الذي اقترحته، أو قام بإلغاء الطلب. يمكنك اقتراح سعر أقل الآن!');
+        } else if (activeRideRef.current && activeRideRef.current.status === 'accepted') {
+          toast.error('تم إلغاء الرحلة.');
+        }
         setActiveRide(null);
+        activeRideRef.current = null;
+        
         const { data: pendingOrders } = await supabase.from('orders')
           .select('*, users!orders_customer_id_fkey(phone_number)')
           .in('status', ['pending', 'pending_driver_approval']);
