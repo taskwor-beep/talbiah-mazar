@@ -31,12 +31,13 @@ export default function App() {
     e.preventDefault();
     // Simulate auth success
     const nameInput = e.target.querySelector('input[type="text"]');
-    setUserName(nameInput && nameInput.value ? nameInput.value : 'مستخدم مزار');
+    let defaultName = authType.includes('driver') ? 'كابتن مزار' : 'مستخدم مزار';
+    setUserName(nameInput && nameInput.value ? nameInput.value : defaultName);
     setIsLoggedIn(true);
     closeAuthModal();
     toast.success(
       authType === 'pilgrim_login' ? 'تم تسجيل الدخول بنجاح!' : 'تم إنشاء الحساب بنجاح!',
-      { position: 'top-center' }
+      { position: 'top-center', duration: 4000 }
     );
   };
 
@@ -295,7 +296,10 @@ export default function App() {
                   />
                 </div>
 
-                <button className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-bold text-lg py-3 rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all mt-4">
+                <button 
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-bold text-lg py-3 rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all mt-4"
+                >
                   {authType === 'pilgrim_login' ? 'دخول' : 'تسجيل حساب جديد'}
                 </button>
               </form>
