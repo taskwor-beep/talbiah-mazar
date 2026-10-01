@@ -58,6 +58,35 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     if (offersData) {
       setAvailableOffers(offersData);
     }
+
+    // Restore active order if user refreshed the page
+    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).single();
+    if (userData) {
+      const { data: activeOrder } = await supabase.from('orders')
+        .select('*, drivers(users(full_name))')
+        .eq('customer_id', userData.id)
+        .in('status', ['pending', 'pending_driver_approval', 'driver_offered', 'accepted', 'picking_up', 'in_transit'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+        
+      if (activeOrder) {
+        setCurrentOrderId(activeOrder.id);
+        setPickup(activeOrder.pickup_address);
+        setDropoff(activeOrder.dropoff_address);
+        setCurrentOrderType(activeOrder.driver_id ? 'direct' : 'search');
+        
+        if (activeOrder.status === 'driver_offered') {
+          setRideStatus('driver_offered');
+          setOfferedRide(activeOrder);
+        } else if (['accepted', 'picking_up', 'in_transit'].includes(activeOrder.status)) {
+          setRideStatus('active');
+          setOfferedRide(activeOrder);
+        } else {
+          setRideStatus('requesting');
+        }
+      }
+    }
   };
 
   useEffect(() => {
