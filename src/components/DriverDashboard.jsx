@@ -14,6 +14,8 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [packages, setPackages] = useState([]);
   const [driverId, setDriverId] = useState(null);
   const [driverStatus, setDriverStatus] = useState('approved');
+  const [pricePrompt, setPricePrompt] = useState(null);
+  const [newOfferPrice, setNewOfferPrice] = useState('');
   
   // New Offer State
   const [newOffer, setNewOffer] = useState({ title: '', priceDZD: '', details: '' });
@@ -234,19 +236,26 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       toast.success('تم استلام الطلب! انطلق نحو العميل.');
       fetchDriverData();
     } else {
-      // Custom ride, prompt for price
-      const price = window.prompt('هذا طلب حر. أدخل السعر المقترح لهذه الرحلة (بالدينار الجزائري):');
-      if (price && !isNaN(price) && Number(price) > 0) {
-        await supabase.from('orders').update({ 
-          driver_id: driverId, 
-          status: 'driver_offered', 
-          total_amount: parseFloat(price) 
-        }).eq('id', ride.id);
-        toast.success('تم إرسال عرضك للمعتمر! في انتظار موافقته.');
-        fetchDriverData();
-      } else if (price !== null) {
-        toast.error('الرجاء إدخال سعر صحيح.');
-      }
+      // Custom ride, show custom modal
+      setPricePrompt(ride);
+      setNewOfferPrice('');
+    }
+  };
+
+  const submitPriceOffer = async (e) => {
+    e.preventDefault();
+    if (newOfferPrice && !isNaN(newOfferPrice) && Number(newOfferPrice) > 0) {
+      await supabase.from('orders').update({ 
+        driver_id: driverId, 
+        status: 'driver_offered', 
+        total_amount: parseFloat(newOfferPrice) 
+      }).eq('id', pricePrompt.id);
+      toast.success('تم إرسال عرضك للمعتمر! في انتظار موافقته.');
+      setPricePrompt(null);
+      setNewOfferPrice('');
+      fetchDriverData();
+    } else {
+      toast.error('الرجاء إدخال سعر صحيح أكبر من الصفر.');
     }
   };
 
@@ -648,6 +657,48 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
            <span className="text-[10px] font-bold">المحفظة</span>
          </button>
       </div>
+
+      {/* Price Negotiation Modal */}
+      {pricePrompt && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md p-8 shadow-2xl transform scale-100 transition-transform relative overflow-hidden animate-[bounce_1s_ease-in-out]">
+            <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-red-600 to-orange-500"></div>
+            <button onClick={() => setPricePrompt(null)} className="absolute top-6 left-6 text-gray-400 hover:text-red-500 transition bg-gray-100 hover:bg-red-50 p-2 rounded-full">
+              <CloseIcon size={20} />
+            </button>
+            <h3 className="text-2xl font-black text-gray-800 mb-2">تقديم عرض سعر</h3>
+            <p className="text-gray-500 mb-6 font-bold text-sm">هذا الطلب حر، أدخل السعر الذي يناسبك لهذه الرحلة.</p>
+            
+            <div className="bg-orange-50/50 border border-orange-100 p-4 rounded-xl mb-6 shadow-inner">
+               <div className="flex items-start gap-3 mb-3">
+                 <div className="mt-1"><div className="w-3 h-3 rounded-full bg-gray-300"></div></div>
+                 <span className="font-bold text-gray-700">{pricePrompt.pickup}</span>
+               </div>
+               <div className="flex items-start gap-3">
+                 <MapPin size={16} className="text-red-500 mt-0.5" />
+                 <span className="font-black text-gray-800">{pricePrompt.dropoff}</span>
+               </div>
+            </div>
+
+            <form onSubmit={submitPriceOffer}>
+              <div className="relative mb-6 group">
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-500 font-black text-xl select-none">د.ج</div>
+                <input 
+                  type="number" 
+                  value={newOfferPrice} 
+                  onChange={(e) => setNewOfferPrice(e.target.value)} 
+                  placeholder="مثال: 1500" 
+                  className="w-full bg-gray-50 border-2 border-gray-200 focus:border-orange-500 focus:bg-white rounded-2xl py-4 pr-16 pl-4 text-3xl font-black text-center text-gray-800 outline-none transition shadow-sm"
+                  autoFocus
+                />
+              </div>
+              <button type="submit" className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-xl py-4 rounded-2xl shadow-[0_10px_20px_rgba(249,115,22,0.3)] hover:shadow-[0_15px_30px_rgba(249,115,22,0.4)] hover:-translate-y-1 transition active:scale-95">
+                إرسال العرض للمعتمر
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
