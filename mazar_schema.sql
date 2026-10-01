@@ -50,9 +50,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
     customer_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
     driver_id UUID REFERENCES public.drivers(id) ON DELETE SET NULL,
     store_id UUID REFERENCES public.stores(id) ON DELETE SET NULL,
-    
-    status TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'picking_up', 'in_transit', 'delivered', 'cancelled')),
-    
+    status TEXT NOT NULL CHECK (status IN ('pending', 'pending_driver_approval', 'driver_offered', 'accepted', 'picking_up', 'in_transit', 'delivered', 'cancelled')),
     pickup_address TEXT NOT NULL,
     dropoff_address TEXT NOT NULL,
     pickup_latitude DOUBLE PRECISION,
