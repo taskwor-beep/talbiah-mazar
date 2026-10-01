@@ -9,6 +9,7 @@ CREATE TABLE public.users (
     full_name TEXT NOT NULL,
     phone_number TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE,
+    password_hash TEXT,
     avatar_url TEXT,
     is_active BOOLEAN DEFAULT TRUE
 );

@@ -197,27 +197,30 @@ export default function App() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeAuthModal}></div>
           <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 overflow-hidden">
             {/* Decorative background in modal */}
-            <div className="absolute top-0 right-0 w-full h-32 bg-gradient-to-r from-red-500 to-orange-500 opacity-10"></div>
+            <div className="absolute top-0 right-0 w-full h-32 bg-gradient-to-r from-red-500 to-orange-500 opacity-10 pointer-events-none"></div>
             
             <button 
               onClick={closeAuthModal}
-              className="absolute top-4 left-4 p-2 text-gray-400 hover:text-gray-700 bg-gray-50 rounded-full transition-colors"
+              className="absolute top-4 left-4 p-2 text-gray-400 hover:text-gray-700 bg-gray-50 rounded-full transition-colors z-[60]"
             >
               <X size={20} />
             </button>
 
             <div className="relative z-10">
               <h2 className="text-2xl font-black mb-2 text-gray-900">
-                {authType === 'pilgrim_login' ? 'تسجيل دخول المعتمر' : 'انضم إلينا كسائق'}
+                {authType === 'pilgrim_login' ? 'تسجيل دخول المعتمر' : 
+                 authType === 'pilgrim_register' ? 'إنشاء حساب معتمر' : 'انضم إلينا كسائق'}
               </h2>
               <p className="text-gray-500 text-sm mb-6">
                 {authType === 'pilgrim_login' 
                   ? 'سجل دخولك لحجز رحلتك بكل سهولة وتتبعها.' 
+                  : authType === 'pilgrim_register'
+                  ? 'أنشئ حساباً جديداً للبدء في طلب سائقك الخاص.'
                   : 'ابدأ بجني الأرباح وتقديم خدمة راقية لضيوف الرحمن.'}
               </p>
 
               <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-                {authType === 'driver_register' && (
+                {(authType === 'driver_register' || authType === 'pilgrim_register') && (
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">الاسم الكامل</label>
                     <input 
@@ -263,11 +266,11 @@ export default function App() {
                 </button>
               </form>
 
-              <div className="mt-6 text-center text-sm text-gray-500">
+              <div className="mt-6 text-center text-sm text-gray-500 relative z-20">
                 {authType === 'pilgrim_login' ? (
-                  <>ليس لديك حساب؟ <button className="text-orange-600 font-bold hover:underline">سجل الآن</button></>
+                  <>ليس لديك حساب؟ <button onClick={() => setAuthType('pilgrim_register')} className="text-orange-600 font-bold hover:underline relative z-30">سجل الآن</button></>
                 ) : (
-                  <>لديك حساب مسبقاً؟ <button onClick={() => setAuthType('pilgrim_login')} className="text-orange-600 font-bold hover:underline">سجل الدخول</button></>
+                  <>لديك حساب مسبقاً؟ <button onClick={() => setAuthType('pilgrim_login')} className="text-orange-600 font-bold hover:underline relative z-30">سجل الدخول</button></>
                 )}
               </div>
             </div>
