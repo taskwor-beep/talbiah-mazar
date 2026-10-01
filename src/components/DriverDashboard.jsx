@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [isOnline, setIsOnline] = useState(true);
@@ -11,32 +12,127 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   ]);
   const [activeTab, setActiveTab] = useState('home'); // 'home' | 'offers'
   
-  const [offers, setOffers] = useState([
-    { id: 1, title: 'توصيل للمطار', priceDZD: 4000, details: 'سيارة مريحة ومكيفة 4 ركاب', image: '' }
-  ]);
-  const [packages, setPackages] = useState([
-    { id: 1, title: 'باقة المزارات الشاملة', priceDZD: 12000, discountDZD: 1000, offers: [1], details: 'غار حراء، جبل ثور، مسجد قباء' }
-  ]);
+  const [offers, setOffers] = useState([]);
+  const [packages, setPackages] = useState([]);
+  const [driverId, setDriverId] = useState(null);
   
   // New Offer State
-  const [newOffer, setNewOffer] = useState({ title: '', priceDZD: '', details: '', image: '' });
-  // New Package State
-  const [newPackage, setNewPackage] = useState({ title: '', priceDZD: '', discountDZD: '', details: '', offers: [] });
+  const [newOffer, setNewOffer] = useState({ title: '', priceDZD: '', details: '' });
+  
+  // New Package State (Dynamic steps)
+  const [newPackage, setNewPackage] = useState({ 
+    title: '', 
+    discountDZD: '',
+    steps: [{ title: '', startTime: '', endTime: '', priceDZD: '' }] 
+  });
 
-  const addOffer = (e) => {
-    e.preventDefault();
-    if (!newOffer.title || !newOffer.priceDZD) return;
-    setOffers([...offers, { ...newOffer, id: Date.now() }]);
-    setNewOffer({ title: '', priceDZD: '', details: '', image: '' });
-    toast.success('تمت إضافة العرض بنجاح وسيتم مراجعته');
+  useEffect(() => {
+    fetchDriverData();
+  }, [userName]);
+
+  const fetchDriverData = async () => {
+    // For demo: get driver by user name, or just first driver
+    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).single();
+    let currentDriverId = null;
+    
+    if (userData) {
+      const { data: driverData } = await supabase.from('drivers').select('id').eq('user_id', userData.id).single();
+      if (driverData) currentDriverId = driverData.id;
+    }
+    
+    // Fallback if not found
+    if (!currentDriverId) {
+      const { data: firstDriver } = await supabase.from('drivers').select('id').limit(1).single();
+      if (firstDriver) currentDriverId = firstDriver.id;
+    }
+
+    if (currentDriverId) {
+      setDriverId(currentDriverId);
+      
+      // Fetch offers
+      const { data: offersData } = await supabase.from('driver_offers').select('*').eq('driver_id', currentDriverId);
+      if (offersData) setOffers(offersData);
+      
+      // Fetch packages and steps
+      const { data: packagesData } = await supabase.from('driver_packages').select('*, package_steps(*)').eq('driver_id', currentDriverId);
+      if (packagesData) setPackages(packagesData);
+    }
   };
 
-  const addPackage = (e) => {
+  const addOffer = async (e) => {
     e.preventDefault();
-    if (!newPackage.title || !newPackage.priceDZD) return;
-    setPackages([...packages, { ...newPackage, id: Date.now() }]);
-    setNewPackage({ title: '', priceDZD: '', discountDZD: '', details: '', offers: [] });
-    toast.success('تمت إضافة الباقة بنجاح');
+    if (!newOffer.title || !newOffer.priceDZD || !driverId) return;
+    
+    const { data, error } = await supabase.from('driver_offers').insert([{
+      driver_id: driverId,
+      title: newOffer.title,
+      price_dzd: newOffer.priceDZD,
+      details: newOffer.details,
+      status: 'pending'
+    }]).select();
+
+    if (!error && data) {
+      setOffers([...offers, data[0]]);
+      setNewOffer({ title: '', priceDZD: '', details: '' });
+      toast.success('تمت إضافة العرض بنجاح وسيتم مراجعته');
+    } else {
+      toast.error('حدث خطأ أثناء إضافة العرض');
+    }
+  };
+
+  const handleStepChange = (index, field, value) => {
+    const updatedSteps = [...newPackage.steps];
+    updatedSteps[index][field] = value;
+    setNewPackage({ ...newPackage, steps: updatedSteps });
+  };
+
+  const addStep = () => {
+    setNewPackage({
+      ...newPackage,
+      steps: [...newPackage.steps, { title: '', startTime: '', endTime: '', priceDZD: '' }]
+    });
+  };
+
+  const removeStep = (index) => {
+    const updatedSteps = newPackage.steps.filter((_, i) => i !== index);
+    setNewPackage({ ...newPackage, steps: updatedSteps });
+  };
+
+  const addPackage = async (e) => {
+    e.preventDefault();
+    if (!newPackage.title || !driverId || newPackage.steps.length === 0) return;
+
+    // Calculate total price from steps
+    const totalPrice = newPackage.steps.reduce((sum, step) => sum + (parseFloat(step.priceDZD) || 0), 0);
+
+    const { data: pkgData, error: pkgError } = await supabase.from('driver_packages').insert([{
+      driver_id: driverId,
+      title: newPackage.title,
+      price_dzd: totalPrice,
+      discount_dzd: newPackage.discountDZD || 0,
+      status: 'pending'
+    }]).select();
+
+    if (pkgData && !pkgError) {
+      const packageId = pkgData[0].id;
+      
+      const stepsToInsert = newPackage.steps.map((step, index) => ({
+        package_id: packageId,
+        step_order: index + 1,
+        title: step.title,
+        start_time: step.startTime,
+        end_time: step.endTime,
+        price_dzd: step.priceDZD
+      }));
+
+      await supabase.from('package_steps').insert(stepsToInsert);
+      
+      toast.success('تمت إضافة الباقة بنجاح بجميع محطاتها!');
+      fetchDriverData(); // Refresh to get the new nested data
+      setNewPackage({ title: '', discountDZD: '', steps: [{ title: '', startTime: '', endTime: '', priceDZD: '' }] });
+    } else {
+      toast.error('حدث خطأ أثناء إضافة الباقة');
+    }
   };
 
   const [activeRide, setActiveRide] = useState(null);
@@ -169,9 +265,11 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
                     <div key={offer.id} className="p-4 bg-orange-50 border border-orange-100 rounded-xl flex justify-between items-center">
                       <div>
                         <div className="font-bold text-gray-800">{offer.title}</div>
-                        <div className="text-sm text-gray-500">{offer.priceDZD} د.ج</div>
+                        <div className="text-sm text-gray-500">{offer.price_dzd} د.ج</div>
                       </div>
-                      <span className="text-xs bg-white text-orange-600 px-2 py-1 rounded-full font-bold shadow-sm">قيد المراجعة</span>
+                      <span className={`text-xs px-2 py-1 rounded-full font-bold shadow-sm ${offer.status === 'approved' ? 'bg-green-100 text-green-600' : offer.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-white text-orange-600'}`}>
+                        {offer.status === 'approved' ? 'مقبول' : offer.status === 'rejected' ? 'مرفوض' : 'قيد المراجعة'}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -180,38 +278,90 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
               {/* Add Package Form */}
               <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><MapPin size={20} className="text-red-500"/> إضافة باقة مزارات (تجمع عدة عروض)</h3>
-                <form onSubmit={addPackage} className="space-y-4">
+                <form onSubmit={addPackage} className="space-y-6">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">اسم الباقة (مثال: باقة مزارات المدينة)</label>
                     <input type="text" value={newPackage.title} onChange={e => setNewPackage({...newPackage, title: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-red-500" required />
                   </div>
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">الثمن الكلي للباقة بالدينار</label>
-                    <input type="number" value={newPackage.priceDZD} onChange={e => setNewPackage({...newPackage, priceDZD: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-red-500" required />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">قيمة الخصم بالدينار (اختياري)</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">قيمة الخصم بالدينار لمالك الباقة (اختياري)</label>
                     <input type="number" value={newPackage.discountDZD} onChange={e => setNewPackage({...newPackage, discountDZD: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-red-500" placeholder="مثال: 500" />
-                    {newPackage.discountDZD && newPackage.priceDZD && (
-                      <p className="text-xs text-red-500 mt-1 font-bold">الثمن بعد الخصم: {newPackage.priceDZD - newPackage.discountDZD} د.ج</p>
+                    <p className="text-xs text-gray-500 mt-1">إذا أضفت خصماً، سيتم خصمه من مجموع أسعار المحطات لتشجيع العميل.</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="font-bold text-gray-700 border-b pb-2">محطات الرحلة (المزارات)</h4>
+                    {newPackage.steps.map((step, index) => (
+                      <div key={index} className="p-4 bg-gray-50 border border-gray-200 rounded-xl relative group">
+                        {index > 0 && (
+                          <button type="button" onClick={() => removeStep(index)} className="absolute left-2 top-2 text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition">
+                            <Trash2 size={18} />
+                          </button>
+                        )}
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs">{index + 1}</div>
+                          <span className="font-bold text-sm">تفاصيل المحطة</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="md:col-span-2">
+                            <input type="text" placeholder="اسم المحطة (مثال: جبل أحد)" value={step.title} onChange={e => handleStepChange(index, 'title', e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-red-500" required />
+                          </div>
+                          <div>
+                            <input type="text" placeholder="وقت البداية (مثال: 08:00 ص)" value={step.startTime} onChange={e => handleStepChange(index, 'startTime', e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-red-500" required />
+                          </div>
+                          <div>
+                            <input type="text" placeholder="وقت النهاية (مثال: 09:30 ص)" value={step.endTime} onChange={e => handleStepChange(index, 'endTime', e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-red-500" required />
+                          </div>
+                          <div className="md:col-span-2">
+                            <input type="number" placeholder="ثمن هذه المحطة بالدينار" value={step.priceDZD} onChange={e => handleStepChange(index, 'priceDZD', e.target.value)} className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-red-500" required />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    <button type="button" onClick={addStep} className="w-full py-3 border-2 border-dashed border-red-300 text-red-500 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 transition">
+                      <Plus size={18} /> إضافة محطة أخرى
+                    </button>
+                    
+                    {newPackage.steps.length > 0 && (
+                      <div className="bg-red-50 p-4 rounded-xl mt-4 border border-red-100 flex justify-between items-center">
+                        <span className="font-bold text-gray-700">المجموع قبل الخصم:</span>
+                        <span className="font-black text-xl text-red-600">{newPackage.steps.reduce((sum, step) => sum + (parseFloat(step.priceDZD) || 0), 0)} د.ج</span>
+                      </div>
                     )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">تفاصيل المحطات</label>
-                    <textarea value={newPackage.details} onChange={e => setNewPackage({...newPackage, details: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-red-500 resize-none h-20" placeholder="اذكر المزارات وترتيبها"></textarea>
-                  </div>
-                  <button type="submit" className="w-full bg-red-500 text-white font-bold py-3 rounded-xl hover:bg-red-600 transition">إنشاء الباقة</button>
+                  
+                  <button type="submit" className="w-full bg-red-500 text-white font-bold py-3 rounded-xl hover:bg-red-600 transition">تأكيد وإنشاء الباقة</button>
                 </form>
 
                 <div className="mt-8 space-y-4">
                   <h4 className="font-bold text-gray-700">باقاتي</h4>
                   {packages.map(pkg => (
-                    <div key={pkg.id} className="p-4 bg-red-50 border border-red-100 rounded-xl">
-                      <div className="font-bold text-gray-800">{pkg.title}</div>
-                      <div className="text-sm text-gray-600 mb-2">{pkg.details}</div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500 line-through">{pkg.priceDZD} د.ج</span>
-                        <span className="font-black text-red-600">{pkg.priceDZD - (pkg.discountDZD || 0)} د.ج</span>
+                    <div key={pkg.id} className="p-5 bg-red-50 border border-red-100 rounded-2xl relative">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="font-black text-lg text-gray-800">{pkg.title}</div>
+                        <span className={`text-xs px-2 py-1 rounded-full font-bold shadow-sm ${pkg.status === 'approved' ? 'bg-green-100 text-green-600' : pkg.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-white text-orange-600'}`}>
+                          {pkg.status === 'approved' ? 'مقبول' : pkg.status === 'rejected' ? 'مرفوض' : 'مراجعة'}
+                        </span>
+                      </div>
+                      
+                      <div className="text-sm text-gray-600 mb-4 mt-2">
+                        <span className="font-bold">المحطات ({pkg.package_steps?.length || 0}):</span>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {pkg.package_steps?.map((step, i) => (
+                            <span key={step.id} className="bg-white px-2 py-1 rounded-lg text-xs border border-red-100 shadow-sm">
+                              {i + 1}. {step.title}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-between items-center border-t border-red-200/50 pt-3">
+                        <div className="text-xs text-gray-500">
+                          {pkg.discount_dzd > 0 && <span className="line-through text-red-300 ml-2">{pkg.price_dzd} د.ج</span>}
+                        </div>
+                        <span className="font-black text-xl text-red-600">{pkg.price_dzd - (pkg.discount_dzd || 0)} د.ج</span>
                       </div>
                     </div>
                   ))}

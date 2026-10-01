@@ -1,26 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapPin, Navigation, Clock, CreditCard, User, LogOut, CheckCircle2, Navigation2, Home, Search as SearchIcon, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { supabase } from '../lib/supabase';
 
 export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [rideStatus, setRideStatus] = useState('idle'); // idle, requesting, active
   const [selectedPackage, setSelectedPackage] = useState(null);
 
-  const availablePackages = [
-    {
-      id: 1,
-      driverName: 'الكابتن علي',
-      title: 'باقة المزارات الشاملة',
-      totalPrice: 11000,
-      originalPrice: 12000,
-      details: 'تجمع بين أهم المزارات في يوم واحد لراحتك',
-      steps: [
-        { id: 101, title: 'غار حراء', startTime: '08:00 ص', endTime: '10:00 ص', price: 4000 },
-        { id: 102, title: 'جبل ثور', startTime: '10:30 ص', endTime: '12:30 م', price: 4000 },
-        { id: 103, title: 'مسجد قباء', startTime: '01:00 م', endTime: '03:00 م', price: 4000 },
-      ]
+  const [availablePackages, setAvailablePackages] = useState([]);
+
+  useEffect(() => {
+    fetchPackages();
+  }, []);
+
+  const fetchPackages = async () => {
+    // Fetch approved packages with their nested steps and driver details
+    const { data, error } = await supabase
+      .from('driver_packages')
+      .select(`
+        *,
+        package_steps(*),
+        drivers(users(full_name))
+      `)
+      .eq('status', 'approved');
+      
+    if (data && !error) {
+      const mappedPackages = data.map(pkg => ({
+        id: pkg.id,
+        driverName: pkg.drivers?.users?.full_name || 'سائق مزار',
+        title: pkg.title,
+        totalPrice: pkg.price_dzd - (pkg.discount_dzd || 0),
+        originalPrice: pkg.price_dzd,
+        details: pkg.details || 'باقة تشمل عدة محطات',
+        steps: pkg.package_steps?.sort((a,b) => a.step_order - b.step_order).map(step => ({
+          id: step.id,
+          title: step.title,
+          startTime: step.start_time,
+          endTime: step.end_time,
+          price: step.price_dzd
+        })) || []
+      }));
+      setAvailablePackages(mappedPackages);
     }
-  ];
+  };
 
   const handleRequestRide = () => {
     setRideStatus('requesting');
