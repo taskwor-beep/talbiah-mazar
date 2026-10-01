@@ -39,11 +39,21 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
 
       // Fetch offers (status = pending)
       const { data: offersData } = await supabase.from('driver_offers').select('*, drivers(users(full_name))').eq('status', 'pending');
+      // Fetch packages (status = pending)
+      const { data: packagesData } = await supabase.from('driver_packages').select('*, drivers(users(full_name))').eq('status', 'pending');
+
+      const combinedOffers = [];
       if (offersData) {
-        setOffers(offersData.map(o => ({
-          id: o.id, driverName: o.drivers?.users?.full_name, title: o.title, priceDZD: o.price_dzd, details: o.details, status: o.status
+        combinedOffers.push(...offersData.map(o => ({
+          id: o.id, type: 'offer', driverName: o.drivers?.users?.full_name, title: o.title, priceDZD: o.price_dzd, details: o.details, status: o.status
         })));
       }
+      if (packagesData) {
+        combinedOffers.push(...packagesData.map(p => ({
+          id: p.id, type: 'package', driverName: p.drivers?.users?.full_name, title: p.title, priceDZD: p.price_dzd, details: p.details, status: p.status
+        })));
+      }
+      setOffers(combinedOffers);
 
       // Fetch settings
       const { data: settingsData } = await supabase.from('admin_settings').select('*');
@@ -79,19 +89,21 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
     }
   };
 
-  const approveOffer = async (id) => {
-    const { error } = await supabase.from('driver_offers').update({ status: 'approved' }).eq('id', id);
+  const approveOffer = async (id, type) => {
+    const table = type === 'package' ? 'driver_packages' : 'driver_offers';
+    const { error } = await supabase.from(table).update({ status: 'approved' }).eq('id', id);
     if (!error) {
       setOffers(prev => prev.filter(o => o.id !== id));
-      toast.success('تمت الموافقة على العرض');
+      toast.success('تمت الموافقة بنجاح');
     }
   };
 
-  const rejectOffer = async (id) => {
-    const { error } = await supabase.from('driver_offers').update({ status: 'rejected' }).eq('id', id);
+  const rejectOffer = async (id, type) => {
+    const table = type === 'package' ? 'driver_packages' : 'driver_offers';
+    const { error } = await supabase.from(table).update({ status: 'rejected' }).eq('id', id);
     if (!error) {
       setOffers(prev => prev.filter(o => o.id !== id));
-      toast.error('تم رفض العرض');
+      toast.error('تم الرفض');
     }
   };
 
@@ -307,6 +319,8 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
                   <div className="flex-1 pr-4">
                     <div className="flex items-center gap-3 mb-2">
                       <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold">سائق: {offer.driverName}</span>
+                      {offer.type === 'package' && <span className="bg-purple-100 text-purple-600 px-3 py-1 rounded-lg text-xs font-bold">باقة مزارات</span>}
+                      {offer.type === 'offer' && <span className="bg-blue-100 text-blue-600 px-3 py-1 rounded-lg text-xs font-bold">عرض توصيل</span>}
                     </div>
                     <h3 className="text-xl font-black text-slate-800 mb-2">{offer.title}</h3>
                     <p className="text-slate-500 text-sm mb-4">{offer.details}</p>
@@ -315,11 +329,11 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
                     </div>
                   </div>
                   <div className="flex gap-3 w-full md:w-auto">
-                    <button onClick={() => rejectOffer(offer.id)} className="flex-1 md:flex-none p-4 bg-slate-100 hover:bg-red-100 hover:text-red-600 text-slate-600 rounded-2xl font-bold transition">
+                    <button onClick={() => rejectOffer(offer.id, offer.type)} className="flex-1 md:flex-none p-4 bg-slate-100 hover:bg-red-100 hover:text-red-600 text-slate-600 rounded-2xl font-bold transition">
                       <X size={24} />
                     </button>
-                    <button onClick={() => approveOffer(offer.id)} className="flex-1 md:flex-none px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl font-bold transition shadow-[0_10px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_15px_30px_rgba(34,197,94,0.4)] hover:-translate-y-1 flex items-center justify-center gap-2">
-                      <Check size={24} /> اعتماد العرض
+                    <button onClick={() => approveOffer(offer.id, offer.type)} className="flex-1 md:flex-none px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl font-bold transition shadow-[0_10px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_15px_30px_rgba(34,197,94,0.4)] hover:-translate-y-1 flex items-center justify-center gap-2">
+                      <Check size={24} /> اعتماد 
                     </button>
                   </div>
                 </div>
