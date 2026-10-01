@@ -184,6 +184,16 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     toast.error('تم رفض العرض، ننتظر عرضاً من سائق آخر...');
   };
 
+  const cancelRequest = async () => {
+    if (!currentOrderId) return;
+    // Set to cancelled so drivers know it's no longer available
+    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', currentOrderId);
+    setRideStatus('idle');
+    setOfferedRide(null);
+    setCurrentOrderId(null);
+    toast.success('تم إلغاء الطلب بنجاح.');
+  };
+
   const handleGetLocation = () => {
     if (navigator.geolocation) {
       toast.loading('جاري تحديد موقعك...', { id: 'loc' });
@@ -294,9 +304,12 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                     <div className="absolute inset-0 border-4 border-t-orange-600 rounded-full animate-spin"></div>
                     <div className="absolute inset-0 flex items-center justify-center"><Navigation size={32} className="text-orange-500" /></div>
                   </div>
-                  <p className="font-black text-xl animate-pulse">
+                  <p className="font-black text-xl animate-pulse text-center mb-6">
                     {currentOrderType !== 'search' ? 'جاري الاتصال بالسائق...' : 'جاري البحث عن أفضل سائق لك...'}
                   </p>
+                  <button onClick={cancelRequest} className="px-8 py-3 bg-red-50 text-red-500 border border-red-100 font-bold rounded-xl hover:bg-red-100 transition shadow-sm">
+                    إلغاء الطلب
+                  </button>
                 </div>
               )}
 
