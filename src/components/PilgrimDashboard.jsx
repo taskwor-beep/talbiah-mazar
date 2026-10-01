@@ -9,6 +9,8 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [pickup, setPickup] = useState('فندق أبراج الكسوة');
   const [dropoff, setDropoff] = useState('');
   const [locationCoords, setLocationCoords] = useState(null);
+  const [currentOrderId, setCurrentOrderId] = useState(null);
+  const [offeredRide, setOfferedRide] = useState(null);
 
   const [availablePackages, setAvailablePackages] = useState([]);
   const [availableOffers, setAvailableOffers] = useState([]);
@@ -57,10 +59,31 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     }
   };
 
+  useEffect(() => {
+    let interval;
+    if (currentOrderId && (rideStatus === 'requesting' || rideStatus === 'driver_offered')) {
+      interval = setInterval(async () => {
+        const { data } = await supabase.from('orders').select('*, drivers(users(full_name))').eq('id', currentOrderId).single();
+        if (data) {
+          if (data.status === 'driver_offered') {
+            setRideStatus('driver_offered');
+            setOfferedRide(data);
+          } else if (data.status === 'accepted') {
+            setRideStatus('active');
+            setOfferedRide(data);
+          } else if (data.status === 'pending') {
+            setRideStatus('requesting');
+          }
+        }
+      }, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [currentOrderId, rideStatus]);
+
   const handleRequestRide = async (type = 'search', predefinedData = null) => {
     let finalPickup = pickup;
     let finalDropoff = dropoff;
-    let price = Math.floor(Math.random() * 500) + 500;
+    let price = null; // No fake price for search
     
     if (type !== 'search' && predefinedData) {
        finalPickup = predefinedData.pickup;
@@ -71,12 +94,13 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     if (!finalPickup || !finalDropoff) return toast.error('يرجى تحديد نقطة الانطلاق والوجهة');
     
     setRideStatus('requesting');
+    setOfferedRide(null);
     
     // Get real user ID
     const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).single();
     
     if (userData) {
-      await supabase.from('orders').insert([{
+      const { data } = await supabase.from('orders').insert([{
         customer_id: userData.id,
         pickup_address: finalPickup,
         dropoff_address: finalDropoff,
@@ -84,13 +108,26 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
         total_amount: price,
         pickup_latitude: locationCoords?.lat,
         pickup_longitude: locationCoords?.lng
-      }]);
+      }]).select();
+      
+      if (data && data.length > 0) {
+        setCurrentOrderId(data[0].id);
+        toast.success('تم إنشاء طلبك! نحن بانتظار عروض السائقين.');
+      }
     }
+  };
 
-    setTimeout(() => {
-      setRideStatus('active');
-      toast.success('تم رفع طلبك ووصل للسائقين!');
-    }, 2000);
+  const acceptOffer = async () => {
+    toast.success('تم قبول العرض! الدفع قيد المعالجة عبر Chargily...');
+    await supabase.from('orders').update({ status: 'accepted' }).eq('id', currentOrderId);
+    setRideStatus('active');
+  };
+
+  const rejectOffer = async () => {
+    await supabase.from('orders').update({ status: 'pending', driver_id: null, total_amount: null }).eq('id', currentOrderId);
+    setRideStatus('requesting');
+    setOfferedRide(null);
+    toast.error('تم رفض العرض، ننتظر عرضاً من سائق آخر...');
   };
 
   const handleGetLocation = () => {
@@ -190,7 +227,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                     <input type="text" value={dropoff} onChange={e => setDropoff(e.target.value)} placeholder="غار حراء، مسجد قباء..." className="w-full bg-gray-50 rounded-2xl py-4 pr-12 pl-4 border border-gray-200 focus:border-red-500 outline-none text-gray-800 font-bold transition" />
                   </div>
                   <button onClick={() => handleRequestRide('search')} className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all mt-4 flex items-center justify-center gap-2">
-                    <SearchIcon size={24} /> تأكيد الحجز والبحث عن سائق
+                    <SearchIcon size={24} /> إنشاء الطلب والبحث عن سائق
                   </button>
                   <p className="text-center text-sm font-bold text-gray-400 mt-2">الدفع يتم بأمان عبر Chargily</p>
                 </div>
@@ -207,6 +244,33 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                 </div>
               )}
 
+              {rideStatus === 'driver_offered' && offeredRide && (
+                <div className="bg-orange-50 p-8 rounded-3xl border border-orange-200 ring-4 ring-orange-50 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
+                  <h3 className="font-black text-xl mb-6 text-gray-800">
+                    تم العثور على سائق!
+                  </h3>
+                  <div className="flex flex-col sm:flex-row gap-6 items-center bg-white p-6 rounded-2xl shadow-sm mb-6">
+                    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center shadow-inner">
+                      <User className="text-gray-400" size={40} />
+                    </div>
+                    <div className="flex-1 text-center sm:text-right">
+                      <h3 className="font-black text-2xl text-gray-800 mb-1">السائق {offeredRide.drivers?.users?.full_name}</h3>
+                      <p className="text-gray-500 font-bold mb-2">يعرض عليك توصيلك مقابل:</p>
+                      <div className="text-3xl font-black text-red-600">{offeredRide.total_amount} د.ج</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <button onClick={rejectOffer} className="flex-1 bg-white border-2 border-red-200 text-red-500 font-bold py-4 rounded-xl hover:bg-red-50 transition">
+                      رفض العرض
+                    </button>
+                    <button onClick={acceptOffer} className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black py-4 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition">
+                      قبول والدفع (Chargily)
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {rideStatus === 'active' && (
                 <div className="bg-orange-50 p-8 rounded-3xl border border-orange-200 ring-4 ring-orange-50 relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
@@ -219,13 +283,8 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                       <User className="text-gray-400" size={40} />
                     </div>
                     <div className="flex-1 text-center sm:text-right">
-                      <h3 className="font-black text-2xl text-gray-800 mb-1">السائق عمر</h3>
-                      <p className="text-gray-500 font-bold mb-2">تويوتا كامري - س ع د 1234</p>
-                      <div className="text-yellow-500 font-black flex items-center justify-center sm:justify-start gap-1">★ 4.9 <span className="text-gray-400 text-sm font-normal">(128 رحلة)</span></div>
-                    </div>
-                    <div className="bg-orange-50 p-4 rounded-xl text-center border border-orange-100">
-                      <div className="text-xs text-orange-600 font-bold mb-1">الوقت المتوقع</div>
-                      <div className="text-2xl font-black text-gray-800 flex items-center gap-1">5 <span className="text-sm">دقائق</span></div>
+                      <h3 className="font-black text-2xl text-gray-800 mb-1">السائق {offeredRide?.drivers?.users?.full_name || '...'}</h3>
+                      <p className="text-gray-500 font-bold mb-2">في انتظار إتمام الدفع...</p>
                     </div>
                   </div>
                   <button onClick={() => setRideStatus('idle')} className="w-full bg-red-100 text-red-600 font-black py-4 rounded-2xl hover:bg-red-200 hover:shadow-sm transition">

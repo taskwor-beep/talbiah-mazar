@@ -59,18 +59,36 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       const { data: packagesData } = await supabase.from('driver_packages').select('*, package_steps(*)').eq('driver_id', currentDriverId);
       if (packagesData) setPackages(packagesData);
 
-      // Fetch pending orders for this driver to accept
-      const { data: pendingOrders } = await supabase.from('orders').select('*').eq('status', 'pending');
-      if (pendingOrders) {
-        setRequests(pendingOrders.map(o => ({
-          id: o.id,
-          pickup: o.pickup_address,
-          dropoff: o.dropoff_address,
-          price: o.total_amount,
-          time: 'جاري الحساب...',
-          lat: o.pickup_latitude,
-          lng: o.pickup_longitude
-        })));
+      // Check for active ride (driver_offered or accepted)
+      const { data: activeOrder } = await supabase.from('orders').select('*, users!orders_customer_id_fkey(full_name)').eq('driver_id', currentDriverId).in('status', ['driver_offered', 'accepted']).single();
+      if (activeOrder) {
+        setActiveRide({
+          id: activeOrder.id,
+          pickup: activeOrder.pickup_address,
+          dropoff: activeOrder.dropoff_address,
+          price: activeOrder.total_amount,
+          status: activeOrder.status,
+          lat: activeOrder.pickup_latitude,
+          lng: activeOrder.pickup_longitude,
+          customerName: activeOrder.users?.full_name
+        });
+      } else {
+        setActiveRide(null);
+        // If no active ride, fetch pending orders for this driver to accept
+        const { data: pendingOrders } = await supabase.from('orders').select('*').eq('status', 'pending');
+        if (pendingOrders) {
+          setRequests(pendingOrders.map(o => ({
+            id: o.id,
+            pickup: o.pickup_address,
+            dropoff: o.dropoff_address,
+            price: o.total_amount || 'قابل للتفاوض',
+            time: 'الآن',
+            lat: o.pickup_latitude,
+            lng: o.pickup_longitude
+          })));
+        } else {
+          setRequests([]);
+        }
       }
 
       // Fetch completed orders for stats
@@ -85,6 +103,16 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       }
     }
   };
+
+  // Poll for updates every 3 seconds (to see if pilgrim accepted)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (driverId && isOnline) {
+        fetchDriverData();
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [driverId, isOnline]);
 
   const addOffer = async (e) => {
     e.preventDefault();
@@ -178,10 +206,27 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
 
   const [activeRide, setActiveRide] = useState(null);
 
-  const acceptRide = (ride) => {
-    setActiveRide(ride);
-    setRequests([]);
-    toast.success('تم استلام الطلب! انطلق نحو العميل.');
+  const acceptRide = async (ride) => {
+    if (ride.price !== 'قابل للتفاوض' && ride.price > 0) {
+      // It's a pre-priced offer or package, accept directly
+      await supabase.from('orders').update({ driver_id: driverId, status: 'accepted' }).eq('id', ride.id);
+      toast.success('تم استلام الطلب! انطلق نحو العميل.');
+      fetchDriverData();
+    } else {
+      // Custom ride, prompt for price
+      const price = window.prompt('هذا طلب حر. أدخل السعر المقترح لهذه الرحلة (بالدينار الجزائري):');
+      if (price && !isNaN(price) && Number(price) > 0) {
+        await supabase.from('orders').update({ 
+          driver_id: driverId, 
+          status: 'driver_offered', 
+          total_amount: parseFloat(price) 
+        }).eq('id', ride.id);
+        toast.success('تم إرسال عرضك للمعتمر! في انتظار موافقته.');
+        fetchDriverData();
+      } else if (price !== null) {
+        toast.error('الرجاء إدخال سعر صحيح.');
+      }
+    }
   };
 
   const finishRide = async () => {
@@ -464,7 +509,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-2xl font-black text-gray-800 flex items-center gap-3">
                 <div className="w-4 h-4 bg-green-500 rounded-full animate-ping"></div>
-                رحلة جارية نحو العميل
+                {activeRide.status === 'driver_offered' ? 'في انتظار موافقة المعتمر...' : 'رحلة جارية نحو العميل'}
               </h2>
               <span className="bg-orange-100 text-orange-600 font-black px-6 py-2 rounded-2xl text-xl">
                 {activeRide.price} د.ج
@@ -475,8 +520,13 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
               <div className="flex items-center gap-4">
                 <div className="bg-white p-3 rounded-xl shadow-sm text-gray-500"><MapPin size={24} /></div>
                 <div>
-                  <div className="text-sm text-gray-400 font-bold mb-1">نقطة الانطلاق (العميل هنا)</div>
+                  <div className="text-sm text-gray-400 font-bold mb-1">نقطة الانطلاق (العميل {activeRide.customerName || 'هنا'})</div>
                   <div className="font-black text-lg text-gray-800">{activeRide.pickup}</div>
+                  {activeRide.lat && activeRide.lng && (
+                    <a href={`https://www.google.com/maps/search/?api=1&query=${activeRide.lat},${activeRide.lng}`} target="_blank" rel="noopener noreferrer" className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg mt-2 inline-flex items-center gap-1 hover:bg-blue-100 transition">
+                      <MapPin size={12} /> افتح في خرائط جوجل للذهاب
+                    </a>
+                  )}
                 </div>
               </div>
               <div className="border-r-2 border-dashed border-gray-300 h-8 mr-6"></div>
@@ -489,9 +539,15 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
               </div>
             </div>
 
-            <button onClick={finishRide} className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black text-xl py-5 rounded-2xl shadow-[0_10px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_15px_30px_rgba(34,197,94,0.4)] hover:-translate-y-1 transition">
-              إنهاء الرحلة وتحصيل المبلغ
-            </button>
+            {activeRide.status === 'accepted' ? (
+              <button onClick={finishRide} className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black text-xl py-5 rounded-2xl shadow-[0_10px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_15px_30px_rgba(34,197,94,0.4)] hover:-translate-y-1 transition">
+                إنهاء الرحلة وتحصيل المبلغ
+              </button>
+            ) : (
+              <div className="text-center p-4 bg-orange-50 text-orange-600 rounded-xl font-bold animate-pulse">
+                تم عرض السعر ({activeRide.price} د.ج) على المعتمر، يرجى الانتظار حتى يقبل...
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-6">
