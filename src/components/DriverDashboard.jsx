@@ -74,13 +74,17 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         });
       } else {
         setActiveRide(null);
-        // If no active ride, fetch pending orders for this driver to accept
         const { data: pendingOrders } = await supabase.from('orders')
           .select('*')
-          .or(`status.eq.pending,and(status.eq.pending_driver_approval,driver_id.eq.${currentDriverId})`);
+          .in('status', ['pending', 'pending_driver_approval']);
         
         if (pendingOrders) {
-          setRequests(pendingOrders.map(o => ({
+          const validOrders = pendingOrders.filter(o => 
+            o.status === 'pending' || 
+            (o.status === 'pending_driver_approval' && o.driver_id === currentDriverId)
+          );
+
+          setRequests(validOrders.map(o => ({
             id: o.id,
             pickup: o.pickup_address,
             dropoff: o.dropoff_address,
@@ -110,12 +114,6 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
 
   // Listen for real-time updates on orders table
   useEffect(() => {
-    let interval;
-    if (driverId && isOnline) {
-      // Fallback polling just in case Realtime isn't enabled by the user
-      interval = setInterval(fetchDriverData, 10000);
-    }
-    
     if (!driverId || !isOnline) return;
     
     // Initial fetch
@@ -133,7 +131,6 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       .subscribe();
 
     return () => {
-      if (interval) clearInterval(interval);
       supabase.removeChannel(subscription);
     };
   }, [driverId, isOnline]);

@@ -78,6 +78,9 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
               setRideStatus('driver_offered');
               setOfferedRide(data);
             } else if (data.status === 'accepted') {
+              if (rideStatus !== 'active') {
+                toast.success('تم قبول طلبك! السائق في طريقه إليك');
+              }
               setRideStatus('active');
               setOfferedRide(data);
             } else if (data.status === 'pending' || data.status === 'pending_driver_approval') {
