@@ -4,6 +4,23 @@ import toast from 'react-hot-toast';
 
 export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [rideStatus, setRideStatus] = useState('idle'); // idle, requesting, active
+  const [selectedPackage, setSelectedPackage] = useState(null);
+
+  const availablePackages = [
+    {
+      id: 1,
+      driverName: 'الكابتن علي',
+      title: 'باقة المزارات الشاملة',
+      totalPrice: 11000,
+      originalPrice: 12000,
+      details: 'تجمع بين أهم المزارات في يوم واحد لراحتك',
+      steps: [
+        { id: 101, title: 'غار حراء', startTime: '08:00 ص', endTime: '10:00 ص', price: 4000 },
+        { id: 102, title: 'جبل ثور', startTime: '10:30 ص', endTime: '12:30 م', price: 4000 },
+        { id: 103, title: 'مسجد قباء', startTime: '01:00 م', endTime: '03:00 م', price: 4000 },
+      ]
+    }
+  ];
 
   const handleRequestRide = () => {
     setRideStatus('requesting');
@@ -70,6 +87,8 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
           
           {/* Main Action Area */}
           <div className="lg:col-span-2 space-y-6">
+            {!selectedPackage ? (
+            <>
             <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 relative overflow-hidden">
               <h2 className="text-2xl font-black mb-6 text-gray-800">أين وجهتك القادمة؟</h2>
               
@@ -126,8 +145,116 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                     إلغاء الطلب
                   </button>
                 </div>
-              )}
             </div>
+
+            {/* Packages Section */}
+            {rideStatus === 'idle' && (
+              <div>
+                <h2 className="text-2xl font-black mb-4 text-gray-800">أو اختر من الباقات الجاهزة</h2>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {availablePackages.map(pkg => (
+                    <div 
+                      key={pkg.id} 
+                      onClick={() => setSelectedPackage(pkg)}
+                      className="bg-gradient-to-br from-red-50 to-orange-50 border border-orange-100 rounded-3xl p-6 cursor-pointer hover:-translate-y-1 hover:shadow-md transition group relative overflow-hidden"
+                    >
+                      <div className="absolute -left-10 -top-10 w-32 h-32 bg-orange-500 rounded-full opacity-5 group-hover:scale-150 transition-transform duration-500"></div>
+                      <div className="flex justify-between items-start mb-2 relative z-10">
+                        <span className="bg-white text-orange-600 px-3 py-1 rounded-full text-xs font-bold shadow-sm">باقة سائق</span>
+                      </div>
+                      <h3 className="font-black text-xl text-gray-800 mb-1 relative z-10">{pkg.title}</h3>
+                      <p className="text-gray-500 text-sm mb-4 relative z-10">{pkg.details}</p>
+                      
+                      <div className="flex items-center justify-between border-t border-orange-200/50 pt-4 relative z-10">
+                        <div>
+                          <p className="text-xs text-gray-400 line-through">{pkg.originalPrice} د.ج</p>
+                          <p className="font-black text-red-600 text-lg">{pkg.totalPrice} د.ج</p>
+                        </div>
+                        <div className="bg-orange-500 text-white w-8 h-8 rounded-full flex items-center justify-center group-hover:rotate-12 transition-transform">
+                          <Navigation2 size={16} className="-rotate-90" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            </>
+            ) : (
+              // Selected Package Detail View
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 relative overflow-hidden">
+                <button onClick={() => setSelectedPackage(null)} className="absolute top-6 left-6 text-gray-400 hover:text-gray-700 transition">
+                  <User size={24} className="hidden" /> {/* Placeholder for back icon if needed */}
+                  <span className="font-bold border-b border-gray-400">العودة</span>
+                </button>
+                
+                <h2 className="text-3xl font-black mb-2 text-gray-800">{selectedPackage.title}</h2>
+                <p className="text-gray-500 mb-8">{selectedPackage.details} - بواسطة {selectedPackage.driverName}</p>
+                
+                <div className="bg-gray-50 p-6 rounded-3xl mb-10 border border-gray-100">
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <p className="text-gray-400 text-sm font-bold">الثمن الإجمالي للرحلة</p>
+                      <div className="flex items-end gap-2">
+                        <span className="text-3xl font-black text-red-600">{selectedPackage.totalPrice} د.ج</span>
+                        <span className="text-gray-400 line-through mb-1">{selectedPackage.originalPrice} د.ج</span>
+                      </div>
+                    </div>
+                    <div className="bg-green-100 text-green-600 px-4 py-2 rounded-xl font-black text-sm border border-green-200">
+                      توفير {selectedPackage.originalPrice - selectedPackage.totalPrice} د.ج!
+                    </div>
+                  </div>
+                  <button className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all">
+                    حجز الباقة الآن
+                  </button>
+                </div>
+
+                <h3 className="font-black text-xl text-gray-800 mb-6">مسار الرحلة والمحطات</h3>
+                
+                <div className="relative pl-6">
+                  {/* Timeline Line */}
+                  <div className="absolute right-6 top-6 bottom-6 w-1 bg-gradient-to-b from-orange-500 to-red-500 rounded-full opacity-20 hidden md:block"></div>
+                  
+                  <div className="space-y-6 relative">
+                    {selectedPackage.steps.map((step, idx) => (
+                      <div key={step.id} className="relative flex flex-col md:flex-row gap-6 md:items-stretch group">
+                        
+                        {/* Timeline Node */}
+                        <div className="hidden md:flex flex-col items-center">
+                          <div className="w-12 h-12 rounded-full bg-white border-4 border-orange-100 flex items-center justify-center z-10 group-hover:border-orange-500 transition-colors shadow-sm">
+                            <span className="font-black text-orange-500">{idx + 1}</span>
+                          </div>
+                        </div>
+
+                        {/* Card Content */}
+                        <div className="flex-1 bg-white border border-gray-100 p-6 rounded-3xl shadow-sm group-hover:shadow-md transition-shadow relative overflow-hidden">
+                          {idx !== selectedPackage.steps.length - 1 && (
+                             <div className="absolute left-1/2 -bottom-4 w-8 h-8 md:hidden text-orange-300">
+                               <Navigation2 size={24} className="rotate-180 mx-auto" />
+                             </div>
+                          )}
+                          <div className="flex justify-between items-start mb-4">
+                            <h4 className="font-black text-xl text-gray-800">{step.title}</h4>
+                            <span className="text-orange-600 font-bold bg-orange-50 px-3 py-1 rounded-xl text-sm">{step.price} د.ج</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-6 text-sm font-bold text-gray-500">
+                            <div className="flex items-center gap-2">
+                              <Clock size={16} className="text-gray-400" /> من {step.startTime}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Clock size={16} className="text-gray-400" /> إلى {step.endTime}
+                            </div>
+                          </div>
+                        </div>
+                        
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+            )}
           </div>
 
           {/* Side Info */}

@@ -9,6 +9,36 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     { id: 1, pickup: 'فندق سويس أوتيل', dropoff: 'مسجد قباء', price: '800', time: 'يبعد 2 دقيقة' },
     { id: 2, pickup: 'حي العزيزية', dropoff: 'محطة قطار الحرمين', price: '3500', time: 'يبعد 5 دقائق' },
   ]);
+  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'offers'
+  
+  const [offers, setOffers] = useState([
+    { id: 1, title: 'توصيل للمطار', priceDZD: 4000, details: 'سيارة مريحة ومكيفة 4 ركاب', image: '' }
+  ]);
+  const [packages, setPackages] = useState([
+    { id: 1, title: 'باقة المزارات الشاملة', priceDZD: 12000, discountDZD: 1000, offers: [1], details: 'غار حراء، جبل ثور، مسجد قباء' }
+  ]);
+  
+  // New Offer State
+  const [newOffer, setNewOffer] = useState({ title: '', priceDZD: '', details: '', image: '' });
+  // New Package State
+  const [newPackage, setNewPackage] = useState({ title: '', priceDZD: '', discountDZD: '', details: '', offers: [] });
+
+  const addOffer = (e) => {
+    e.preventDefault();
+    if (!newOffer.title || !newOffer.priceDZD) return;
+    setOffers([...offers, { ...newOffer, id: Date.now() }]);
+    setNewOffer({ title: '', priceDZD: '', details: '', image: '' });
+    toast.success('تمت إضافة العرض بنجاح وسيتم مراجعته');
+  };
+
+  const addPackage = (e) => {
+    e.preventDefault();
+    if (!newPackage.title || !newPackage.priceDZD) return;
+    setPackages([...packages, { ...newPackage, id: Date.now() }]);
+    setNewPackage({ title: '', priceDZD: '', discountDZD: '', details: '', offers: [] });
+    toast.success('تمت إضافة الباقة بنجاح');
+  };
+
   const [activeRide, setActiveRide] = useState(null);
 
   const acceptRide = (ride) => {
@@ -39,15 +69,15 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         </div>
 
         <nav className="flex-1 space-y-2">
-          <a href="#" className="flex items-center gap-3 p-3 bg-orange-50 text-orange-600 rounded-xl font-bold transition">
+          <button onClick={() => setActiveTab('home')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition ${activeTab === 'home' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}>
             <Home size={20} /> الرئيسية
-          </a>
-          <a href="#" className="flex items-center gap-3 p-3 text-gray-500 hover:bg-gray-50 rounded-xl font-bold transition">
-            <ListIcon size={20} /> سجل الطلبات
-          </a>
-          <a href="#" className="flex items-center gap-3 p-3 text-gray-500 hover:bg-gray-50 rounded-xl font-bold transition">
+          </button>
+          <button onClick={() => setActiveTab('offers')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition ${activeTab === 'offers' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}>
+            <ListIcon size={20} /> عروضي وباقاتي
+          </button>
+          <button className="w-full flex items-center gap-3 p-3 text-gray-500 hover:bg-gray-50 rounded-xl font-bold transition">
             <Wallet size={20} /> المحفظة
-          </a>
+          </button>
         </nav>
 
         <div className="pt-6 border-t border-gray-100 mt-auto">
@@ -103,6 +133,96 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
           </div>
         </div>
 
+        {activeTab === 'offers' && (
+          <div className="space-y-8 pb-10">
+            <div className="mb-6">
+              <h2 className="text-2xl font-black text-gray-800 mb-2">إدارة عروضي وباقاتي</h2>
+              <p className="text-gray-500">قم بإضافة عروض التوصيل الخاصة بك وباقات المزارات ليراها المعتمرون.</p>
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* Add Offer Form */}
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Car size={20} className="text-orange-500"/> إضافة عرض توصيل جديد</h3>
+                <form onSubmit={addOffer} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">اسم العرض (مثال: توصيل المطار)</label>
+                    <input type="text" value={newOffer.title} onChange={e => setNewOffer({...newOffer, title: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-orange-500" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">الثمن بالدينار الجزائري</label>
+                    <input type="number" value={newOffer.priceDZD} onChange={e => setNewOffer({...newOffer, priceDZD: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-orange-500" required />
+                    {newOffer.priceDZD && (
+                      <p className="text-xs text-green-600 mt-1 font-bold">يظهر للمعتمر: ≈ {(newOffer.priceDZD * 0.028).toFixed(2)} ريال سعودي</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">التفاصيل (اختياري)</label>
+                    <textarea value={newOffer.details} onChange={e => setNewOffer({...newOffer, details: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-orange-500 resize-none h-20"></textarea>
+                  </div>
+                  <button type="submit" className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl hover:bg-orange-600 transition">إضافة العرض</button>
+                </form>
+
+                <div className="mt-8 space-y-4">
+                  <h4 className="font-bold text-gray-700">عروضي الحالية</h4>
+                  {offers.map(offer => (
+                    <div key={offer.id} className="p-4 bg-orange-50 border border-orange-100 rounded-xl flex justify-between items-center">
+                      <div>
+                        <div className="font-bold text-gray-800">{offer.title}</div>
+                        <div className="text-sm text-gray-500">{offer.priceDZD} د.ج</div>
+                      </div>
+                      <span className="text-xs bg-white text-orange-600 px-2 py-1 rounded-full font-bold shadow-sm">قيد المراجعة</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Add Package Form */}
+              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><MapPin size={20} className="text-red-500"/> إضافة باقة مزارات (تجمع عدة عروض)</h3>
+                <form onSubmit={addPackage} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">اسم الباقة (مثال: باقة مزارات المدينة)</label>
+                    <input type="text" value={newPackage.title} onChange={e => setNewPackage({...newPackage, title: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-red-500" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">الثمن الكلي للباقة بالدينار</label>
+                    <input type="number" value={newPackage.priceDZD} onChange={e => setNewPackage({...newPackage, priceDZD: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-red-500" required />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">قيمة الخصم بالدينار (اختياري)</label>
+                    <input type="number" value={newPackage.discountDZD} onChange={e => setNewPackage({...newPackage, discountDZD: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-red-500" placeholder="مثال: 500" />
+                    {newPackage.discountDZD && newPackage.priceDZD && (
+                      <p className="text-xs text-red-500 mt-1 font-bold">الثمن بعد الخصم: {newPackage.priceDZD - newPackage.discountDZD} د.ج</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">تفاصيل المحطات</label>
+                    <textarea value={newPackage.details} onChange={e => setNewPackage({...newPackage, details: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 outline-none focus:border-red-500 resize-none h-20" placeholder="اذكر المزارات وترتيبها"></textarea>
+                  </div>
+                  <button type="submit" className="w-full bg-red-500 text-white font-bold py-3 rounded-xl hover:bg-red-600 transition">إنشاء الباقة</button>
+                </form>
+
+                <div className="mt-8 space-y-4">
+                  <h4 className="font-bold text-gray-700">باقاتي</h4>
+                  {packages.map(pkg => (
+                    <div key={pkg.id} className="p-4 bg-red-50 border border-red-100 rounded-xl">
+                      <div className="font-bold text-gray-800">{pkg.title}</div>
+                      <div className="text-sm text-gray-600 mb-2">{pkg.details}</div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-500 line-through">{pkg.priceDZD} د.ج</span>
+                        <span className="font-black text-red-600">{pkg.priceDZD - (pkg.discountDZD || 0)} د.ج</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {activeTab === 'home' && (
+          <>
         {!isOnline ? (
           <div className="bg-white rounded-3xl p-12 text-center shadow-sm border border-gray-100">
             <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-300">
@@ -191,6 +311,8 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
               </div>
             )}
           </div>
+        )}
+        </>
         )}
 
       </main>

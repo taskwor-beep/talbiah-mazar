@@ -4,6 +4,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
 import PilgrimDashboard from './components/PilgrimDashboard';
 import DriverDashboard from './components/DriverDashboard';
+import AdminDashboard from './components/AdminDashboard';
 
 export default function App() {
   const [pickup, setPickup] = useState('');
@@ -11,7 +12,7 @@ export default function App() {
   
   // Auth Modal State
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authType, setAuthType] = useState('pilgrim_login'); // 'pilgrim_login' | 'driver_register' | 'pilgrim_register'
+  const [authType, setAuthType] = useState('pilgrim_login'); // 'pilgrim_login' | 'driver_register' | 'pilgrim_register' | 'admin_login'
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentView, setCurrentView] = useState('landing');
   const [userName, setUserName] = useState('');
@@ -64,6 +65,14 @@ export default function App() {
         setCurrentView('dashboard');
         closeAuthModal();
         toast.success('تم إنشاء الحساب بنجاح!', { id: toastId });
+      } else if (authType === 'admin_login' && phoneInput === 'admin' && passwordInput === 'admin') {
+         // Mock admin login
+         setUserName('المدير العام');
+         setUserRole('admin');
+         setIsLoggedIn(true);
+         setCurrentView('dashboard');
+         closeAuthModal();
+         toast.success('تم تسجيل الدخول كمدير', { id: toastId });
       } else {
          const { data, error } = await supabase.from('users')
            .select('*')
@@ -96,7 +105,9 @@ export default function App() {
     return (
       <>
         <Toaster />
-        {userRole === 'driver' ? (
+        {userRole === 'admin' ? (
+          <AdminDashboard userName={userName || 'مدير النظام'} onLogout={handleLogout} onGoHome={() => setCurrentView('landing')} />
+        ) : userRole === 'driver' ? (
           <DriverDashboard userName={userName} onLogout={handleLogout} onGoHome={() => setCurrentView('landing')} />
         ) : (
           <PilgrimDashboard userName={userName} onLogout={handleLogout} onGoHome={() => setCurrentView('landing')} />
@@ -361,11 +372,13 @@ export default function App() {
 
             <div className="relative z-10">
               <h2 className="text-2xl font-black mb-2 text-gray-900">
-                {authType === 'pilgrim_login' ? 'تسجيل دخول المعتمر' : 
+                {authType === 'admin_login' ? 'دخول الإدارة' :
+                 authType === 'pilgrim_login' ? 'تسجيل دخول المعتمر' : 
                  authType === 'pilgrim_register' ? 'إنشاء حساب معتمر' : 'انضم إلينا كسائق'}
               </h2>
               <p className="text-gray-500 text-sm mb-6">
-                {authType === 'pilgrim_login' 
+                {authType === 'admin_login' ? 'سجل دخولك كمدير لإدارة المنصة.' :
+                 authType === 'pilgrim_login' 
                   ? 'سجل دخولك لحجز رحلتك بكل سهولة وتتبعها.' 
                   : authType === 'pilgrim_register'
                   ? 'أنشئ حساباً جديداً للبدء في طلب سائقك الخاص.'
@@ -385,11 +398,13 @@ export default function App() {
                 )}
                 
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">رقم الهاتف</label>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">
+                    {authType === 'admin_login' ? 'اسم المستخدم' : 'رقم الهاتف'}
+                  </label>
                   <input 
                     type="tel" 
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition text-left"
-                    placeholder="+966 5X XXX XXXX"
+                    placeholder={authType === 'admin_login' ? "admin" : "+966 5X XXX XXXX"}
                     dir="ltr"
                   />
                 </div>
@@ -418,15 +433,20 @@ export default function App() {
                   type="submit"
                   className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-bold text-lg py-3 rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all mt-4"
                 >
-                  {authType === 'pilgrim_login' ? 'دخول' : 'تسجيل حساب جديد'}
+                  {(authType === 'pilgrim_login' || authType === 'admin_login') ? 'دخول' : 'تسجيل حساب جديد'}
                 </button>
               </form>
 
-              <div className="mt-6 text-center text-sm text-gray-500 relative z-20">
+              <div className="mt-6 text-center text-sm text-gray-500 relative z-20 flex flex-col gap-2">
                 {authType === 'pilgrim_login' ? (
-                  <>ليس لديك حساب؟ <button onClick={() => setAuthType('pilgrim_register')} className="text-orange-600 font-bold hover:underline relative z-30">سجل الآن</button></>
+                  <>
+                    <div>ليس لديك حساب؟ <button type="button" onClick={() => setAuthType('pilgrim_register')} className="text-orange-600 font-bold hover:underline relative z-30">سجل الآن</button></div>
+                    <div>دخول الإدارة؟ <button type="button" onClick={() => setAuthType('admin_login')} className="text-slate-600 font-bold hover:underline relative z-30">اضغط هنا</button></div>
+                  </>
+                ) : authType === 'admin_login' ? (
+                  <div>عودة للمعتمرين؟ <button type="button" onClick={() => setAuthType('pilgrim_login')} className="text-orange-600 font-bold hover:underline relative z-30">دخول معتمر</button></div>
                 ) : (
-                  <>لديك حساب مسبقاً؟ <button onClick={() => setAuthType('pilgrim_login')} className="text-orange-600 font-bold hover:underline relative z-30">سجل الدخول</button></>
+                  <div>لديك حساب مسبقاً؟ <button type="button" onClick={() => setAuthType('pilgrim_login')} className="text-orange-600 font-bold hover:underline relative z-30">سجل الدخول</button></div>
                 )}
               </div>
             </div>
