@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet, Plus, Trash2 } from 'lucide-react';
+import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet, Plus, Trash2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 
@@ -16,6 +16,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [driverStatus, setDriverStatus] = useState('approved');
   const [pricePrompt, setPricePrompt] = useState(null);
   const [newOfferPrice, setNewOfferPrice] = useState('');
+  const [rejectedOrders, setRejectedOrders] = useState([]);
   
   // New Offer State
   const [newOffer, setNewOffer] = useState({ title: '', priceDZD: '', details: '' });
@@ -80,7 +81,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         activeRideRef.current = newActiveRide;
       } else {
         if (activeRideRef.current && activeRideRef.current.status === 'driver_offered') {
-          toast.error('قام المعتمر برفض السعر الذي اقترحته، أو قام بإلغاء الطلب. يمكنك اقتراح سعر أقل الآن!');
+          setRejectedOrders(prev => [...prev, activeRideRef.current.id]);
         } else if (activeRideRef.current && activeRideRef.current.status === 'accepted') {
           toast.error('تم إلغاء الرحلة.');
         }
@@ -643,6 +644,13 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
                         <MapPin size={16} className="text-red-500 mt-0.5" />
                         <span className="font-black">{req.dropoff}</span>
                       </div>
+                      
+                      {rejectedOrders.includes(req.id) && (
+                        <div className="mt-4 bg-red-50 text-red-600 text-xs font-bold p-3 rounded-xl border border-red-100 flex items-center gap-2">
+                          <AlertCircle size={16} className="shrink-0" />
+                          <span>قام المعتمر برفض سعرك الذي اقترحته، أو قام بإلغاء الطلب. يمكنك محاولة تقديم سعر أقل الآن!</span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex gap-3 mt-auto">
                       <button onClick={() => rejectRideRequest(req.id)} className="bg-gray-50 p-4 rounded-2xl text-gray-400 hover:bg-red-50 hover:text-red-500 transition" title="رفض الطلب">
