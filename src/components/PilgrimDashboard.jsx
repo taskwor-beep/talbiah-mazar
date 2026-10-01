@@ -6,6 +6,8 @@ import { supabase } from '../lib/supabase';
 export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [rideStatus, setRideStatus] = useState('idle'); // idle, requesting, active
   const [selectedPackage, setSelectedPackage] = useState(null);
+  const [pickup, setPickup] = useState('فندق أبراج الكسوة');
+  const [dropoff, setDropoff] = useState('');
 
   const [availablePackages, setAvailablePackages] = useState([]);
   const [availableOffers, setAvailableOffers] = useState([]);
@@ -54,13 +56,38 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     }
   };
 
-  const handleRequestRide = () => {
+  const handleRequestRide = async (type = 'search', predefinedData = null) => {
+    let finalPickup = pickup;
+    let finalDropoff = dropoff;
+    let price = Math.floor(Math.random() * 500) + 500;
+    
+    if (type !== 'search' && predefinedData) {
+       finalPickup = predefinedData.pickup;
+       finalDropoff = predefinedData.dropoff;
+       price = predefinedData.price;
+    }
+
+    if (!finalPickup || !finalDropoff) return toast.error('يرجى تحديد نقطة الانطلاق والوجهة');
+    
     setRideStatus('requesting');
-    toast('جاري البحث عن أقرب سائق...', { icon: '🔍' });
+    
+    // Get real user ID
+    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).single();
+    
+    if (userData) {
+      await supabase.from('orders').insert([{
+        customer_id: userData.id,
+        pickup_address: finalPickup,
+        dropoff_address: finalDropoff,
+        status: 'pending',
+        total_amount: price
+      }]);
+    }
+
     setTimeout(() => {
       setRideStatus('active');
-      toast.success('تم العثور على الكابتن عمر!');
-    }, 3000);
+      toast.success('تم رفع طلبك ووصل للسائقين!');
+    }, 2000);
   };
 
   return (
@@ -128,13 +155,13 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                 <div className="space-y-4">
                   <div className="relative">
                     <div className="absolute right-4 top-1/2 -translate-y-1/2"><div className="w-4 h-4 rounded-full border-4 border-orange-500"></div></div>
-                    <input type="text" defaultValue="فندق أبراج الكسوة" className="w-full bg-gray-50 rounded-2xl py-4 pr-12 pl-4 border border-gray-200 focus:border-orange-500 outline-none text-gray-800 font-bold transition" />
+                    <input type="text" value={pickup} onChange={e => setPickup(e.target.value)} className="w-full bg-gray-50 rounded-2xl py-4 pr-12 pl-4 border border-gray-200 focus:border-orange-500 outline-none text-gray-800 font-bold transition" />
                   </div>
                   <div className="relative">
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 text-red-500"><MapPin size={20} /></div>
-                    <input type="text" placeholder="غار حراء، مسجد قباء..." className="w-full bg-gray-50 rounded-2xl py-4 pr-12 pl-4 border border-gray-200 focus:border-red-500 outline-none text-gray-800 font-bold transition" />
+                    <input type="text" value={dropoff} onChange={e => setDropoff(e.target.value)} placeholder="غار حراء، مسجد قباء..." className="w-full bg-gray-50 rounded-2xl py-4 pr-12 pl-4 border border-gray-200 focus:border-red-500 outline-none text-gray-800 font-bold transition" />
                   </div>
-                  <button onClick={handleRequestRide} className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all mt-4 flex items-center justify-center gap-2">
+                  <button onClick={() => handleRequestRide('search')} className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all mt-4 flex items-center justify-center gap-2">
                     <SearchIcon size={24} /> تأكيد الحجز والبحث عن كابتن
                   </button>
                   <p className="text-center text-sm font-bold text-gray-400 mt-2">الدفع يتم بأمان عبر Chargily</p>
@@ -197,9 +224,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                       <div className="flex items-center justify-between border-t border-gray-100 pt-4">
                         <span className="font-black text-blue-600 text-lg">{offer.price_dzd} د.ج</span>
                         <button onClick={() => {
-                          setRideStatus('requesting');
-                          toast.success('جاري طلب العرض من السائق...');
-                          setTimeout(() => setRideStatus('active'), 2000);
+                          handleRequestRide('offer', { pickup: 'موقعي الحالي', dropoff: offer.title, price: offer.price_dzd });
                         }} className="bg-blue-600 text-white px-5 py-2 rounded-xl font-bold text-sm hover:bg-blue-700 hover:shadow-lg transition">طلب التوصيلة</button>
                       </div>
                     </div>
@@ -265,7 +290,9 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                       توفير {selectedPackage.originalPrice - selectedPackage.totalPrice} د.ج!
                     </div>
                   </div>
-                  <button className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all">
+                  <button onClick={() => {
+                    handleRequestRide('package', { pickup: 'جولة سياحية', dropoff: selectedPackage.title, price: selectedPackage.totalPrice });
+                  }} className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all">
                     حجز الباقة الآن
                   </button>
                 </div>

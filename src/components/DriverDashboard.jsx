@@ -160,6 +160,20 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     }
   };
 
+  const deleteOffer = async (id) => {
+    if(!window.confirm('هل أنت متأكد من حذف هذا العرض؟')) return;
+    await supabase.from('driver_offers').delete().eq('id', id);
+    setOffers(offers.filter(o => o.id !== id));
+    toast.success('تم حذف العرض بنجاح');
+  };
+
+  const deletePackage = async (id) => {
+    if(!window.confirm('هل أنت متأكد من حذف هذه الباقة؟')) return;
+    await supabase.from('driver_packages').delete().eq('id', id);
+    setPackages(packages.filter(p => p.id !== id));
+    toast.success('تم حذف الباقة بنجاح');
+  };
+
   const [activeRide, setActiveRide] = useState(null);
 
   const acceptRide = (ride) => {
@@ -315,9 +329,14 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
                         <div className="font-bold text-gray-800">{offer.title}</div>
                         <div className="text-sm text-gray-500">{offer.price_dzd} د.ج</div>
                       </div>
-                      <span className={`text-xs px-2 py-1 rounded-full font-bold shadow-sm ${offer.status === 'approved' ? 'bg-green-100 text-green-600' : offer.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-white text-orange-600'}`}>
-                        {offer.status === 'approved' ? 'مقبول' : offer.status === 'rejected' ? 'مرفوض' : 'قيد المراجعة'}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-xs px-2 py-1 rounded-full font-bold shadow-sm ${offer.status === 'approved' ? 'bg-green-100 text-green-600' : offer.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-white text-orange-600'}`}>
+                          {offer.status === 'approved' ? 'مقبول' : offer.status === 'rejected' ? 'مرفوض' : 'قيد المراجعة'}
+                        </span>
+                        <button onClick={() => deleteOffer(offer.id)} className="text-red-400 hover:text-red-600 transition" title="حذف العرض">
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -389,9 +408,14 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
                     <div key={pkg.id} className="p-5 bg-red-50 border border-red-100 rounded-2xl relative">
                       <div className="flex justify-between items-start mb-2">
                         <div className="font-black text-lg text-gray-800">{pkg.title}</div>
-                        <span className={`text-xs px-2 py-1 rounded-full font-bold shadow-sm ${pkg.status === 'approved' ? 'bg-green-100 text-green-600' : pkg.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-white text-orange-600'}`}>
-                          {pkg.status === 'approved' ? 'مقبول' : pkg.status === 'rejected' ? 'مرفوض' : 'مراجعة'}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs px-2 py-1 rounded-full font-bold shadow-sm ${pkg.status === 'approved' ? 'bg-green-100 text-green-600' : pkg.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-white text-orange-600'}`}>
+                            {pkg.status === 'approved' ? 'مقبول' : pkg.status === 'rejected' ? 'مرفوض' : 'مراجعة'}
+                          </span>
+                          <button onClick={() => deletePackage(pkg.id)} className="text-red-400 hover:text-red-600 transition" title="حذف الباقة">
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </div>
                       
                       <div className="text-sm text-gray-600 mb-4 mt-2">

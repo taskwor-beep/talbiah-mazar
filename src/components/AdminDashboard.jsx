@@ -37,10 +37,10 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
         })));
       }
 
-      // Fetch offers (status = pending)
-      const { data: offersData } = await supabase.from('driver_offers').select('*, drivers(users(full_name))').eq('status', 'pending');
-      // Fetch packages (status = pending)
-      const { data: packagesData } = await supabase.from('driver_packages').select('*, drivers(users(full_name))').eq('status', 'pending');
+      // Fetch offers
+      const { data: offersData } = await supabase.from('driver_offers').select('*, drivers(users(full_name))');
+      // Fetch packages
+      const { data: packagesData } = await supabase.from('driver_packages').select('*, drivers(users(full_name))');
 
       const combinedOffers = [];
       if (offersData) {
@@ -93,7 +93,7 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
     const table = type === 'package' ? 'driver_packages' : 'driver_offers';
     const { error } = await supabase.from(table).update({ status: 'approved' }).eq('id', id);
     if (!error) {
-      setOffers(prev => prev.filter(o => o.id !== id));
+      setOffers(prev => prev.map(o => o.id === id ? { ...o, status: 'approved' } : o));
       toast.success('تمت الموافقة بنجاح');
     }
   };
@@ -102,7 +102,7 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
     const table = type === 'package' ? 'driver_packages' : 'driver_offers';
     const { error } = await supabase.from(table).update({ status: 'rejected' }).eq('id', id);
     if (!error) {
-      setOffers(prev => prev.filter(o => o.id !== id));
+      setOffers(prev => prev.map(o => o.id === id ? { ...o, status: 'rejected' } : o));
       toast.error('تم الرفض');
     }
   };
@@ -329,12 +329,20 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
                     </div>
                   </div>
                   <div className="flex gap-3 w-full md:w-auto">
-                    <button onClick={() => rejectOffer(offer.id, offer.type)} className="flex-1 md:flex-none p-4 bg-slate-100 hover:bg-red-100 hover:text-red-600 text-slate-600 rounded-2xl font-bold transition">
-                      <X size={24} />
-                    </button>
-                    <button onClick={() => approveOffer(offer.id, offer.type)} className="flex-1 md:flex-none px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl font-bold transition shadow-[0_10px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_15px_30px_rgba(34,197,94,0.4)] hover:-translate-y-1 flex items-center justify-center gap-2">
-                      <Check size={24} /> اعتماد 
-                    </button>
+                    {offer.status === 'pending' ? (
+                      <>
+                        <button onClick={() => rejectOffer(offer.id, offer.type)} className="flex-1 md:flex-none p-4 bg-slate-100 hover:bg-red-100 hover:text-red-600 text-slate-600 rounded-2xl font-bold transition">
+                          <X size={24} />
+                        </button>
+                        <button onClick={() => approveOffer(offer.id, offer.type)} className="flex-1 md:flex-none px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-2xl font-bold transition shadow-[0_10px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_15px_30px_rgba(34,197,94,0.4)] hover:-translate-y-1 flex items-center justify-center gap-2">
+                          <Check size={24} /> اعتماد 
+                        </button>
+                      </>
+                    ) : (
+                      <span className={`px-4 py-2 rounded-xl font-bold ${offer.status === 'approved' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                        {offer.status === 'approved' ? 'تم الاعتماد' : 'مرفوض'}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))

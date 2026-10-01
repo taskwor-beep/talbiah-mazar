@@ -443,7 +443,9 @@ export default function App() {
                 {authType === 'pilgrim_login' ? (
                   <>
                     <div>ليس لديك حساب؟ <button type="button" onClick={() => setAuthType('pilgrim_register')} className="text-orange-600 font-bold hover:underline relative z-30">سجل الآن</button></div>
-                    <div>دخول الإدارة؟ <button type="button" onClick={() => setAuthType('admin_login')} className="text-slate-600 font-bold hover:underline relative z-30">اضغط هنا</button></div>
+                    {window.location.search.includes('admin') && (
+                      <div>دخول الإدارة؟ <button type="button" onClick={() => setAuthType('admin_login')} className="text-slate-600 font-bold hover:underline relative z-30">اضغط هنا</button></div>
+                    )}
                   </>
                 ) : authType === 'admin_login' ? (
                   <div>عودة للمعتمرين؟ <button type="button" onClick={() => setAuthType('pilgrim_login')} className="text-orange-600 font-bold hover:underline relative z-30">دخول معتمر</button></div>
