@@ -145,6 +145,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                     إلغاء الطلب
                   </button>
                 </div>
+              )}
             </div>
 
             {/* Packages Section */}
