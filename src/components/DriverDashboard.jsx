@@ -75,7 +75,10 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       } else {
         setActiveRide(null);
         // If no active ride, fetch pending orders for this driver to accept
-        const { data: pendingOrders } = await supabase.from('orders').select('*').eq('status', 'pending');
+        const { data: pendingOrders } = await supabase.from('orders')
+          .select('*')
+          .or(`status.eq.pending,and(status.eq.pending_driver_approval,driver_id.eq.${currentDriverId})`);
+        
         if (pendingOrders) {
           setRequests(pendingOrders.map(o => ({
             id: o.id,
@@ -84,7 +87,8 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
             price: o.total_amount || 'قابل للتفاوض',
             time: 'الآن',
             lat: o.pickup_latitude,
-            lng: o.pickup_longitude
+            lng: o.pickup_longitude,
+            isDirect: o.status === 'pending_driver_approval'
           })));
         } else {
           setRequests([]);
@@ -106,6 +110,12 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
 
   // Listen for real-time updates on orders table
   useEffect(() => {
+    let interval;
+    if (driverId && isOnline) {
+      // Fallback polling just in case Realtime isn't enabled by the user
+      interval = setInterval(fetchDriverData, 10000);
+    }
+    
     if (!driverId || !isOnline) return;
     
     // Initial fetch
@@ -117,13 +127,13 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
         (payload) => {
-          // Whenever ANY order changes, refreshes the driver's screen (requests & active ride)
           fetchDriverData();
         }
       )
       .subscribe();
 
     return () => {
+      if (interval) clearInterval(interval);
       supabase.removeChannel(subscription);
     };
   }, [driverId, isOnline]);
@@ -243,6 +253,12 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     }
   };
 
+  const rejectRideRequest = async (id) => {
+    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', id);
+    fetchDriverData();
+    toast.error('تم إلغاء الطلب');
+  };
+
   const finishRide = async () => {
     if (activeRide) {
       await supabase.from('orders').update({ status: 'delivered' }).eq('id', activeRide.id);
@@ -318,7 +334,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       </aside>
 
       {/* Main Area */}
-      <main className="flex-1 p-4 md:p-8 h-screen overflow-y-auto">
+      <main className="flex-1 p-4 md:p-8 h-screen overflow-y-auto pb-24 md:pb-8">
         <div className="flex justify-between items-center mb-8 bg-white p-4 rounded-3xl shadow-sm border border-gray-100 md:hidden">
            <span className="text-xl font-black text-gray-800 cursor-pointer" onClick={onGoHome}>مزار سائق</span>
            <button onClick={onLogout} className="text-red-500"><LogOut size={20} /></button>
@@ -580,8 +596,10 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
                   <div key={req.id} className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between gap-6 hover:shadow-lg hover:-translate-y-1 transition">
                     <div>
                       <div className="flex justify-between items-start mb-4">
-                        <span className="text-orange-500 font-bold text-sm bg-orange-50 px-3 py-1 rounded-lg flex items-center gap-1"><Navigation size={14}/> {req.time}</span>
-                        <span className="font-black text-2xl text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-500">{req.price} د.ج</span>
+                        <span className="text-orange-500 font-bold text-sm bg-orange-50 px-3 py-1 rounded-lg flex items-center gap-1">
+                          <Navigation size={14}/> {req.isDirect ? 'طلب مباشر لك' : req.time}
+                        </span>
+                        <span className="font-black text-2xl text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-500">{req.price} {req.price !== 'قابل للتفاوض' && 'د.ج'}</span>
                       </div>
                       <div className="flex flex-col gap-1 text-gray-600 mb-3">
                         <div className="flex items-start gap-3">
@@ -600,7 +618,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
                       </div>
                     </div>
                     <div className="flex gap-3 mt-auto">
-                      <button className="bg-gray-50 p-4 rounded-2xl text-gray-400 hover:bg-red-50 hover:text-red-500 transition">
+                      <button onClick={() => rejectRideRequest(req.id)} className="bg-gray-50 p-4 rounded-2xl text-gray-400 hover:bg-red-50 hover:text-red-500 transition" title="رفض الطلب">
                         <CloseIcon size={24} />
                       </button>
                       <button onClick={() => acceptRide(req)} className="flex-1 bg-gray-900 text-white font-black px-6 py-4 rounded-2xl hover:bg-black hover:shadow-lg transition flex items-center justify-center gap-2 text-lg">
@@ -617,6 +635,23 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         )}
 
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around p-3 z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
+         <button onClick={() => setActiveTab('home')} className={`p-2 flex flex-col items-center gap-1 ${activeTab === 'home' ? 'text-orange-600' : 'text-gray-400'}`}>
+           <Home size={24} />
+           <span className="text-[10px] font-bold">الرئيسية</span>
+         </button>
+         <button onClick={() => setActiveTab('offers')} className={`p-2 flex flex-col items-center gap-1 ${activeTab === 'offers' ? 'text-orange-600' : 'text-gray-400'}`}>
+           <ListIcon size={24} />
+           <span className="text-[10px] font-bold">باقاتي</span>
+         </button>
+         <button onClick={handleWalletClick} className={`p-2 flex flex-col items-center gap-1 text-gray-400`}>
+           <Wallet size={24} />
+           <span className="text-[10px] font-bold">المحفظة</span>
+         </button>
+      </div>
+
     </div>
   );
 }

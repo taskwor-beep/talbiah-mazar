@@ -11,6 +11,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [locationCoords, setLocationCoords] = useState(null);
   const [currentOrderId, setCurrentOrderId] = useState(null);
   const [offeredRide, setOfferedRide] = useState(null);
+  const [currentOrderType, setCurrentOrderType] = useState('search');
 
   const [availablePackages, setAvailablePackages] = useState([]);
   const [availableOffers, setAvailableOffers] = useState([]);
@@ -79,8 +80,13 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
             } else if (data.status === 'accepted') {
               setRideStatus('active');
               setOfferedRide(data);
-            } else if (data.status === 'pending') {
+            } else if (data.status === 'pending' || data.status === 'pending_driver_approval') {
               setRideStatus('requesting');
+            } else if (data.status === 'cancelled') {
+              setRideStatus('idle');
+              setOfferedRide(null);
+              setCurrentOrderId(null);
+              toast.error('عذراً، لم يتوفر السائق لهذه الرحلة وتم الإلغاء. يرجى اختيار سائق آخر.');
             }
           }
         }
@@ -96,15 +102,18 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     let finalPickup = pickup;
     let finalDropoff = dropoff;
     let price = null; // No fake price for search
+    let targetDriverId = null;
     
     if (type !== 'search' && predefinedData) {
        finalPickup = predefinedData.pickup;
        finalDropoff = predefinedData.dropoff;
        price = predefinedData.price;
+       targetDriverId = predefinedData.driver_id;
     }
 
     if (!finalPickup || !finalDropoff) return toast.error('يرجى تحديد نقطة الانطلاق والوجهة');
     
+    setCurrentOrderType(type);
     setRideStatus('requesting');
     setOfferedRide(null);
     
@@ -114,9 +123,10 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     if (userData) {
       const { data } = await supabase.from('orders').insert([{
         customer_id: userData.id,
+        driver_id: targetDriverId,
         pickup_address: finalPickup,
         dropoff_address: finalDropoff,
-        status: 'pending',
+        status: targetDriverId ? 'pending_driver_approval' : 'pending',
         total_amount: price,
         pickup_latitude: locationCoords?.lat,
         pickup_longitude: locationCoords?.lng
@@ -252,7 +262,9 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                     <div className="absolute inset-0 border-4 border-t-orange-600 rounded-full animate-spin"></div>
                     <div className="absolute inset-0 flex items-center justify-center"><Navigation size={32} className="text-orange-500" /></div>
                   </div>
-                  <p className="font-black text-xl animate-pulse">جاري البحث عن أفضل سائق لك...</p>
+                  <p className="font-black text-xl animate-pulse">
+                    {currentOrderType !== 'search' ? 'جاري الاتصال بالسائق...' : 'جاري البحث عن أفضل سائق لك...'}
+                  </p>
                 </div>
               )}
 
@@ -323,7 +335,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                       <div className="flex items-center justify-between border-t border-gray-100 pt-4">
                         <span className="font-black text-blue-600 text-lg">{offer.price_dzd} د.ج</span>
                         <button onClick={() => {
-                          handleRequestRide('offer', { pickup: 'موقعي الحالي', dropoff: offer.title, price: offer.price_dzd });
+                          handleRequestRide('offer', { pickup: 'موقعي الحالي', dropoff: offer.title, price: offer.price_dzd, driver_id: offer.driver_id });
                         }} className="bg-blue-600 text-white px-5 py-2 rounded-xl font-bold text-sm hover:bg-blue-700 hover:shadow-lg transition">طلب التوصيلة</button>
                       </div>
                     </div>
@@ -390,7 +402,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                     </div>
                   </div>
                   <button onClick={() => {
-                    handleRequestRide('package', { pickup: 'جولة سياحية', dropoff: selectedPackage.title, price: selectedPackage.totalPrice });
+                    handleRequestRide('package', { pickup: 'جولة سياحية', dropoff: selectedPackage.title, price: selectedPackage.totalPrice, driver_id: selectedPackage.driver_id });
                   }} className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all">
                     حجز الباقة الآن
                   </button>

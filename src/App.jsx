@@ -14,10 +14,17 @@ export default function App() {
   // Auth Modal State
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authType, setAuthType] = useState('pilgrim_login'); // 'pilgrim_login' | 'driver_register' | 'pilgrim_register' | 'admin_login'
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentView, setCurrentView] = useState('landing');
-  const [userName, setUserName] = useState('');
-  const [userRole, setUserRole] = useState('pilgrim');
+  const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('isLoggedIn') === 'true');
+  const [currentView, setCurrentView] = useState(localStorage.getItem('currentView') || 'landing');
+  const [userName, setUserName] = useState(localStorage.getItem('userName') || '');
+  const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || 'pilgrim');
+
+  React.useEffect(() => {
+    localStorage.setItem('isLoggedIn', isLoggedIn);
+    localStorage.setItem('currentView', currentView);
+    localStorage.setItem('userName', userName);
+    localStorage.setItem('userRole', userRole);
+  }, [isLoggedIn, currentView, userName, userRole]);
 
   const mazarat = [
     { name: 'غار حراء', price: '1500', rating: '4.9' },

@@ -487,6 +487,26 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
           </div>
         )}
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around p-3 z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
+         <button onClick={() => setActiveTab('drivers')} className={`p-2 flex flex-col items-center gap-1 ${activeTab === 'drivers' ? 'text-red-600' : 'text-gray-400'}`}>
+           <Users size={24} />
+           <span className="text-[10px] font-bold">السائقين</span>
+         </button>
+         <button onClick={() => setActiveTab('packages')} className={`p-2 flex flex-col items-center gap-1 ${activeTab === 'packages' ? 'text-red-600' : 'text-gray-400'}`}>
+           <Package size={24} />
+           <span className="text-[10px] font-bold">الباقات</span>
+         </button>
+         <button onClick={() => setActiveTab('offers')} className={`p-2 flex flex-col items-center gap-1 ${activeTab === 'offers' ? 'text-red-600' : 'text-gray-400'}`}>
+           <ListIcon size={24} />
+           <span className="text-[10px] font-bold">العروض</span>
+         </button>
+         <button onClick={() => setActiveTab('settings')} className={`p-2 flex flex-col items-center gap-1 ${activeTab === 'settings' ? 'text-red-600' : 'text-gray-400'}`}>
+           <Settings size={24} />
+           <span className="text-[10px] font-bold">الإعدادات</span>
+         </button>
+      </div>
     </div>
   );
 }
