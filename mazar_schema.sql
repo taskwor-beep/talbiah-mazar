@@ -10,6 +10,7 @@ CREATE TABLE public.users (
     phone_number TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE,
     password_hash TEXT,
+    role TEXT DEFAULT 'pilgrim' CHECK (role IN ('pilgrim', 'driver', 'admin')),
     avatar_url TEXT,
     is_active BOOLEAN DEFAULT TRUE
 );
@@ -20,7 +21,7 @@ CREATE TABLE public.drivers (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
     vehicle_type TEXT NOT NULL, -- e.g., 'car', 'motorcycle', 'van'
-    license_plate TEXT NOT NULL,
+    license_plate TEXT,
     rating DECIMAL(3,2) DEFAULT 5.00,
     total_deliveries INTEGER DEFAULT 0,
     is_online BOOLEAN DEFAULT FALSE,
