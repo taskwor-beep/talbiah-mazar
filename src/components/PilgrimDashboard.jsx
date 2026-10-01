@@ -60,7 +60,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     }
 
     // Restore active order if user refreshed the page
-    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).single();
+    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).limit(1).maybeSingle();
     if (userData) {
       const { data: activeOrder } = await supabase.from('orders')
         .select('*, drivers(users(full_name))')
@@ -68,7 +68,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
         .in('status', ['pending', 'pending_driver_approval', 'driver_offered', 'accepted', 'picking_up', 'in_transit'])
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
         
       if (activeOrder) {
         setCurrentOrderId(activeOrder.id);
@@ -101,7 +101,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
         async (payload) => {
           const updatedOrder = payload.new;
           // When order status changes, fetch full details to get driver name
-          const { data } = await supabase.from('orders').select('*, drivers(users(full_name))').eq('id', currentOrderId).single();
+          const { data } = await supabase.from('orders').select('*, drivers(users(full_name))').eq('id', currentOrderId).limit(1).maybeSingle();
           if (data) {
             if (data.status === 'driver_offered') {
               setRideStatus('driver_offered');
@@ -150,7 +150,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     setOfferedRide(null);
     
     // Get real user ID
-    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).single();
+    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).limit(1).maybeSingle();
     
     if (userData) {
       const { data, error } = await supabase.from('orders').insert([{

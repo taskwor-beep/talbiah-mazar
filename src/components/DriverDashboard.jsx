@@ -36,11 +36,11 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
 
   const fetchDriverData = async () => {
     // For demo: get driver by user name, or just first driver
-    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).single();
+    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).limit(1).maybeSingle();
     let currentDriverId = null;
     
     if (userData) {
-      const { data: driverData } = await supabase.from('drivers').select('id, status').eq('user_id', userData.id).single();
+      const { data: driverData } = await supabase.from('drivers').select('id, status').eq('user_id', userData.id).limit(1).maybeSingle();
       if (driverData) {
         currentDriverId = driverData.id;
         setDriverStatus(driverData.status);
@@ -49,7 +49,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     
     // Fallback if not found
     if (!currentDriverId) {
-      const { data: firstDriver } = await supabase.from('drivers').select('id').limit(1).single();
+      const { data: firstDriver } = await supabase.from('drivers').select('id').limit(1).maybeSingle();
       if (firstDriver) currentDriverId = firstDriver.id;
     }
 
@@ -65,7 +65,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       if (packagesData) setPackages(packagesData);
 
       // Check for active ride (driver_offered or accepted)
-      const { data: activeOrder } = await supabase.from('orders').select('*, users!orders_customer_id_fkey(full_name, phone_number)').eq('driver_id', currentDriverId).in('status', ['driver_offered', 'accepted']).single();
+      const { data: activeOrder } = await supabase.from('orders').select('*, users!orders_customer_id_fkey(full_name, phone_number)').eq('driver_id', currentDriverId).in('status', ['driver_offered', 'accepted']).limit(1).maybeSingle();
       if (activeOrder) {
         const newActiveRide = {
           id: activeOrder.id,
