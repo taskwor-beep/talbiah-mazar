@@ -62,7 +62,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       if (packagesData) setPackages(packagesData);
 
       // Check for active ride (driver_offered or accepted)
-      const { data: activeOrder } = await supabase.from('orders').select('*, users!orders_customer_id_fkey(full_name)').eq('driver_id', currentDriverId).in('status', ['driver_offered', 'accepted']).single();
+      const { data: activeOrder } = await supabase.from('orders').select('*, users!orders_customer_id_fkey(full_name, phone_number)').eq('driver_id', currentDriverId).in('status', ['driver_offered', 'accepted']).single();
       if (activeOrder) {
         setActiveRide({
           id: activeOrder.id,
@@ -82,8 +82,8 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         
         if (pendingOrders) {
           const validOrders = pendingOrders.filter(o => 
-            o.status === 'pending' || 
-            (o.status === 'pending_driver_approval' && o.driver_id === currentDriverId)
+            (o.status === 'pending' && !o.driver_id) || // General pool
+            (o.status === 'pending_driver_approval' && o.driver_id === currentDriverId) // Direct to me
           );
 
           setRequests(validOrders.map(o => ({
@@ -94,7 +94,8 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
             time: 'الآن',
             lat: o.pickup_latitude,
             lng: o.pickup_longitude,
-            isDirect: o.status === 'pending_driver_approval'
+            isDirect: o.status === 'pending_driver_approval',
+            customerPhone: o.users?.phone_number
           })));
         } else {
           setRequests([]);
@@ -674,10 +675,18 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
                  <div className="mt-1"><div className="w-3 h-3 rounded-full bg-gray-300"></div></div>
                  <span className="font-bold text-gray-700">{pricePrompt.pickup}</span>
                </div>
-               <div className="flex items-start gap-3">
+               <div className="flex items-start gap-3 mb-4">
                  <MapPin size={16} className="text-red-500 mt-0.5" />
                  <span className="font-black text-gray-800">{pricePrompt.dropoff}</span>
                </div>
+               {pricePrompt.customerPhone && (
+                 <div className="border-t border-orange-100 pt-4 mt-2">
+                   <a href={`https://wa.me/${pricePrompt.customerPhone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="w-full bg-[#25D366] text-white font-bold py-3 rounded-xl hover:bg-[#1da851] transition shadow-md flex items-center justify-center gap-2">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                     تواصل واتساب للاستفسار
+                   </a>
+                 </div>
+               )}
             </div>
 
             <form onSubmit={submitPriceOffer}>

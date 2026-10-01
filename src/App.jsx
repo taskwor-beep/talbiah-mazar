@@ -416,6 +416,11 @@ export default function App() {
                     placeholder={authType === 'admin_login' ? "admin" : "+966 5X XXX XXXX"}
                     dir="ltr"
                   />
+                  {authType === 'pilgrim_register' && (
+                    <p className="text-xs text-orange-600 font-bold mt-1 text-right">
+                      ملاحظة هامة: يرجى كتابة رقم هاتف مرتبط بـ (واتساب) لتسهيل تواصل السائقين معك.
+                    </p>
+                  )}
                 </div>
 
                 {authType === 'driver_register' && (
