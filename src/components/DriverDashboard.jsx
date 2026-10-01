@@ -67,7 +67,9 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
           pickup: o.pickup_address,
           dropoff: o.dropoff_address,
           price: o.total_amount,
-          time: 'جاري الحساب...'
+          time: 'جاري الحساب...',
+          lat: o.pickup_latitude,
+          lng: o.pickup_longitude
         })));
       }
 
@@ -204,7 +206,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
           </div>
           <h2 className="text-2xl font-black text-gray-800 mb-4">حسابك قيد المراجعة</h2>
           <p className="text-gray-500 mb-8 leading-relaxed">
-            مرحباً بك في مزار كابتن! فريق الإدارة يقوم حالياً بمراجعة طلب انضمامك. ستتمكن من الدخول للوحة التحكم واستقبال الطلبات فور الموافقة على حسابك.
+            مرحباً بك في مزار سائق! فريق الإدارة يقوم حالياً بمراجعة طلب انضمامك. ستتمكن من الدخول للوحة التحكم واستقبال الطلبات فور الموافقة على حسابك.
           </p>
           <button onClick={onLogout} className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl hover:bg-black transition">
             تسجيل الخروج
@@ -223,7 +225,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
           <div className="bg-gradient-to-br from-gray-800 to-black p-2 rounded-xl text-white shadow-md">
             <Car size={24} />
           </div>
-          <span className="text-2xl font-black text-gray-800">مزار كابتن</span>
+          <span className="text-2xl font-black text-gray-800">مزار سائق</span>
         </div>
 
         <nav className="flex-1 space-y-2">
@@ -259,7 +261,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       {/* Main Area */}
       <main className="flex-1 p-4 md:p-8 h-screen overflow-y-auto">
         <div className="flex justify-between items-center mb-8 bg-white p-4 rounded-3xl shadow-sm border border-gray-100 md:hidden">
-           <span className="text-xl font-black text-gray-800 cursor-pointer" onClick={onGoHome}>مزار كابتن</span>
+           <span className="text-xl font-black text-gray-800 cursor-pointer" onClick={onGoHome}>مزار سائق</span>
            <button onClick={onLogout} className="text-red-500"><LogOut size={20} /></button>
         </div>
 
@@ -511,9 +513,16 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
                         <span className="text-orange-500 font-bold text-sm bg-orange-50 px-3 py-1 rounded-lg flex items-center gap-1"><Navigation size={14}/> {req.time}</span>
                         <span className="font-black text-2xl text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-500">{req.price} د.ج</span>
                       </div>
-                      <div className="flex items-start gap-3 text-gray-600 mb-3">
-                        <div className="mt-1"><div className="w-3 h-3 rounded-full bg-gray-300"></div></div>
-                        <span className="font-bold">{req.pickup}</span>
+                      <div className="flex flex-col gap-1 text-gray-600 mb-3">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1"><div className="w-3 h-3 rounded-full bg-gray-300"></div></div>
+                          <span className="font-bold">{req.pickup}</span>
+                        </div>
+                        {req.lat && req.lng && (
+                          <a href={`https://www.google.com/maps/search/?api=1&query=${req.lat},${req.lng}`} target="_blank" rel="noopener noreferrer" className="mr-6 text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg inline-flex items-center w-fit gap-1 hover:bg-blue-100 transition">
+                            <MapPin size={12} /> افتح في خرائط جوجل للذهاب
+                          </a>
+                        )}
                       </div>
                       <div className="flex items-start gap-3 text-gray-800">
                         <MapPin size={16} className="text-red-500 mt-0.5" />

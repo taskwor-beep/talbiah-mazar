@@ -8,6 +8,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [pickup, setPickup] = useState('فندق أبراج الكسوة');
   const [dropoff, setDropoff] = useState('');
+  const [locationCoords, setLocationCoords] = useState(null);
 
   const [availablePackages, setAvailablePackages] = useState([]);
   const [availableOffers, setAvailableOffers] = useState([]);
@@ -80,7 +81,9 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
         pickup_address: finalPickup,
         dropoff_address: finalDropoff,
         status: 'pending',
-        total_amount: price
+        total_amount: price,
+        pickup_latitude: locationCoords?.lat,
+        pickup_longitude: locationCoords?.lng
       }]);
     }
 
@@ -88,6 +91,26 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
       setRideStatus('active');
       toast.success('تم رفع طلبك ووصل للسائقين!');
     }, 2000);
+  };
+
+  const handleGetLocation = () => {
+    if (navigator.geolocation) {
+      toast.loading('جاري تحديد موقعك...', { id: 'loc' });
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          setLocationCoords({ lat, lng });
+          setPickup(`موقعي الحالي (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+          toast.success('تم تحديد موقعك بدقة!', { id: 'loc' });
+        },
+        (error) => {
+          toast.error('لم نتمكن من تحديد موقعك، يرجى تفعيل الـ GPS', { id: 'loc' });
+        }
+      );
+    } else {
+      toast.error('متصفحك لا يدعم تحديد الموقع');
+    }
   };
 
   return (
@@ -153,16 +176,21 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
               
               {rideStatus === 'idle' && (
                 <div className="space-y-4">
-                  <div className="relative">
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2"><div className="w-4 h-4 rounded-full border-4 border-orange-500"></div></div>
-                    <input type="text" value={pickup} onChange={e => setPickup(e.target.value)} className="w-full bg-gray-50 rounded-2xl py-4 pr-12 pl-4 border border-gray-200 focus:border-orange-500 outline-none text-gray-800 font-bold transition" />
+                  <div className="relative flex gap-2 items-center">
+                    <div className="relative flex-1">
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2"><div className="w-4 h-4 rounded-full border-4 border-orange-500"></div></div>
+                      <input type="text" value={pickup} onChange={e => setPickup(e.target.value)} className="w-full bg-gray-50 rounded-2xl py-4 pr-12 pl-4 border border-gray-200 focus:border-orange-500 outline-none text-gray-800 font-bold transition" />
+                    </div>
+                    <button onClick={handleGetLocation} className="bg-orange-100 text-orange-600 p-4 rounded-2xl hover:bg-orange-200 transition" title="تحديد موقعي">
+                      <Navigation size={24} />
+                    </button>
                   </div>
                   <div className="relative">
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 text-red-500"><MapPin size={20} /></div>
                     <input type="text" value={dropoff} onChange={e => setDropoff(e.target.value)} placeholder="غار حراء، مسجد قباء..." className="w-full bg-gray-50 rounded-2xl py-4 pr-12 pl-4 border border-gray-200 focus:border-red-500 outline-none text-gray-800 font-bold transition" />
                   </div>
                   <button onClick={() => handleRequestRide('search')} className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all mt-4 flex items-center justify-center gap-2">
-                    <SearchIcon size={24} /> تأكيد الحجز والبحث عن كابتن
+                    <SearchIcon size={24} /> تأكيد الحجز والبحث عن سائق
                   </button>
                   <p className="text-center text-sm font-bold text-gray-400 mt-2">الدفع يتم بأمان عبر Chargily</p>
                 </div>
@@ -175,7 +203,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                     <div className="absolute inset-0 border-4 border-t-orange-600 rounded-full animate-spin"></div>
                     <div className="absolute inset-0 flex items-center justify-center"><Navigation size={32} className="text-orange-500" /></div>
                   </div>
-                  <p className="font-black text-xl animate-pulse">جاري البحث عن أفضل كابتن لك...</p>
+                  <p className="font-black text-xl animate-pulse">جاري البحث عن أفضل سائق لك...</p>
                 </div>
               )}
 
@@ -184,14 +212,14 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                   <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
                   <h3 className="font-black text-xl mb-6 text-gray-800 flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
-                    الكابتن في طريقه إليك
+                    السائق في طريقه إليك
                   </h3>
                   <div className="flex flex-col sm:flex-row gap-6 items-center bg-white p-6 rounded-2xl shadow-sm mb-6">
                     <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center shadow-inner">
                       <User className="text-gray-400" size={40} />
                     </div>
                     <div className="flex-1 text-center sm:text-right">
-                      <h3 className="font-black text-2xl text-gray-800 mb-1">الكابتن عمر</h3>
+                      <h3 className="font-black text-2xl text-gray-800 mb-1">السائق عمر</h3>
                       <p className="text-gray-500 font-bold mb-2">تويوتا كامري - س ع د 1234</p>
                       <div className="text-yellow-500 font-black flex items-center justify-center sm:justify-start gap-1">★ 4.9 <span className="text-gray-400 text-sm font-normal">(128 رحلة)</span></div>
                     </div>
