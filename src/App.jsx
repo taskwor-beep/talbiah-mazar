@@ -131,11 +131,15 @@ export default function App() {
       
       {/* Navbar */}
       <nav className="absolute top-0 w-full z-40 p-6 flex justify-between items-center max-w-7xl mx-auto left-0 right-0">
-        <div className="flex items-center gap-2">
+        <div 
+          className="flex items-center gap-2 cursor-pointer" 
+          onDoubleClick={() => openAuthModal('admin_login')}
+          title="مزار"
+        >
           <div className="bg-gradient-to-br from-red-600 to-orange-500 p-2 rounded-xl text-white shadow-lg">
             <Navigation size={28} />
           </div>
-          <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-700 to-orange-600">
+          <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-700 to-orange-600 select-none">
             مزار
           </span>
         </div>
