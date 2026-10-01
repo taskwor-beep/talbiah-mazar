@@ -14,7 +14,6 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [packages, setPackages] = useState([]);
   const [driverId, setDriverId] = useState(null);
   const [driverStatus, setDriverStatus] = useState('approved');
-  const [activeRide, setActiveRide] = useState(null);
   const [pricePrompt, setPricePrompt] = useState(null);
   const [newOfferPrice, setNewOfferPrice] = useState('');
   
