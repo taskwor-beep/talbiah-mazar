@@ -1,145 +1,175 @@
 import React, { useState } from 'react';
-import { Package, MapPin, Clock, ChevronLeft, Star, Phone, CheckCircle2 } from 'lucide-react';
+import { MapPin, Navigation, Car, ShieldCheck, Wallet, ChevronLeft, Search, Star } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('active');
+  const [pickup, setPickup] = useState('');
+  const [dropoff, setDropoff] = useState('');
 
-  const orders = [
-    {
-      id: '#ORD-9021',
-      status: 'active',
-      customer: 'أحمد محمد',
-      pickup: 'مطعم البيك، حي العزيزية',
-      dropoff: 'فندق أبراج الكسوة، البرج الرابع',
-      price: '25',
-      time: '15 دقيقة',
-      driver: { name: 'عمر', rating: 4.8 },
-      color: 'border-orange-500',
-      bg: 'bg-orange-50'
-    },
-    {
-      id: '#ORD-9022',
-      status: 'active',
-      customer: 'سارة عبدالله',
-      pickup: 'صيدلية النهدي، شارع المنصور',
-      dropoff: 'فندق سويس أوتيل، المقام',
-      price: '15',
-      time: '5 دقائق',
-      driver: { name: 'يوسف', rating: 4.9 },
-      color: 'border-red-500',
-      bg: 'bg-red-50'
-    },
-    {
-      id: '#ORD-8801',
-      status: 'completed',
-      customer: 'خالد عبدالعزيز',
-      pickup: 'سوبر ماركت بن داود',
-      dropoff: 'فندق فيرمونت، برج الساعة',
-      price: '35',
-      time: 'تم التوصيل',
-      driver: { name: 'ماجد', rating: 5.0 },
-      color: 'border-green-500',
-      bg: 'bg-green-50'
-    }
+  const mazarat = [
+    { name: 'غار حراء', price: '1500', rating: '4.9' },
+    { name: 'جبل ثور', price: '1200', rating: '4.8' },
+    { name: 'مسجد قباء (المدينة)', price: '800', rating: '5.0' },
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-red-50 font-sans p-4 md:p-8">
-      <div className="max-w-md mx-auto bg-white/80 backdrop-blur-xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden border border-white/40">
-        
-        {/* Header */}
-        <header className="bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 p-6 text-white rounded-b-3xl shadow-lg">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-2xl font-bold mb-1">مزار للتوصيل</h1>
-              <p className="text-orange-100 text-sm opacity-90">أسرع خدمة توصيل في المشاعر</p>
-            </div>
-            <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm">
-              <Package size={28} className="text-white" />
-            </div>
+    <div className="min-h-screen font-sans text-gray-900 bg-orange-50 selection:bg-orange-200">
+      
+      {/* Navbar */}
+      <nav className="absolute top-0 w-full z-50 p-6 flex justify-between items-center max-w-7xl mx-auto left-0 right-0">
+        <div className="flex items-center gap-2">
+          <div className="bg-gradient-to-br from-red-600 to-orange-500 p-2 rounded-xl text-white shadow-lg">
+            <Navigation size={28} />
           </div>
+          <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-700 to-orange-600">
+            مزار
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+          <button className="text-gray-700 font-bold hover:text-orange-600 transition">انضم كسائق</button>
+          <button className="bg-white text-orange-600 px-5 py-2.5 rounded-full font-bold shadow-md hover:shadow-lg transition">
+            تسجيل الدخول
+          </button>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden flex items-center min-h-[90vh]">
+        <div className="absolute inset-0 bg-gradient-to-br from-orange-100 via-yellow-50 to-red-50 -z-10"></div>
+        {/* Decorative background blur */}
+        <div className="absolute top-20 right-0 w-96 h-96 bg-red-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20 -z-10"></div>
+        <div className="absolute top-40 left-10 w-72 h-72 bg-yellow-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 -z-10"></div>
+
+        <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center w-full">
           
-          {/* Tabs */}
-          <div className="flex bg-black/10 rounded-xl p-1">
-            <button 
-              onClick={() => setActiveTab('active')}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'active' ? 'bg-white text-orange-600 shadow' : 'text-white/80 hover:text-white'}`}
-            >
-              الطلبات الحالية
-            </button>
-            <button 
-              onClick={() => setActiveTab('completed')}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'completed' ? 'bg-white text-orange-600 shadow' : 'text-white/80 hover:text-white'}`}
-            >
-              الطلبات المكتملة
-            </button>
-          </div>
-        </header>
+          <div className="text-right z-10">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/60 border border-orange-200 text-orange-700 text-sm font-bold mb-6 backdrop-blur-md">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span>
+              </span>
+              متوفرون الآن في مكة والمدينة
+            </div>
+            
+            <h1 className="text-5xl lg:text-7xl font-black leading-[1.2] mb-6 text-gray-900">
+              رفيقك الموثوق <br />
+              في <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-yellow-500">البقاع المقدسة</span>
+            </h1>
+            
+            <p className="text-xl text-gray-600 mb-10 leading-relaxed max-w-lg">
+              خدمة نقل آمنة وسريعة للحجاج والمعتمرين. نوصلك إلى المزارات التاريخية أو أي وجهة تختارها براحة تامة والدفع بالدينار الجزائري.
+            </p>
 
-        {/* Content */}
-        <div className="p-5 space-y-4">
-          {orders.filter(o => o.status === activeTab).map((order) => (
-            <div key={order.id} className={`p-4 rounded-2xl border-2 ${order.color} ${order.bg} bg-opacity-40 transition-transform hover:scale-[1.02] cursor-pointer`}>
-              <div className="flex justify-between items-start mb-3">
-                <span className="font-bold text-gray-800">{order.id}</span>
-                <span className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600">
-                  {order.price} ريال
-                </span>
-              </div>
-              
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center text-gray-600 text-sm">
-                  <div className="w-6 flex justify-center"><div className="w-2 h-2 rounded-full bg-orange-400"></div></div>
-                  <span className="truncate">{order.pickup}</span>
-                </div>
-                <div className="flex items-center text-gray-600 text-sm">
-                  <div className="w-6 flex justify-center"><MapPin size={14} className="text-red-500" /></div>
-                  <span className="truncate">{order.dropoff}</span>
-                </div>
-              </div>
-
-              <hr className="border-gray-200/60 mb-3" />
-
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-bold text-sm">
-                    {order.driver.name.charAt(0)}
+            {/* Search Box */}
+            <div className="bg-white p-4 rounded-3xl shadow-[0_20px_50px_rgba(234,88,12,0.1)] border border-orange-100/50 max-w-lg relative z-20">
+              <div className="space-y-3">
+                <div className="relative">
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
+                    <div className="w-4 h-4 rounded-full border-4 border-orange-500"></div>
                   </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-800">{order.driver.name}</p>
-                    <div className="flex items-center text-[10px] text-gray-500">
-                      <Star size={10} className="text-yellow-500 mr-1 fill-yellow-500" />
-                      {order.driver.rating}
+                  <input 
+                    type="text" 
+                    placeholder="موقعك الحالي (مثال: فندق أبراج الكسوة)"
+                    className="w-full bg-gray-50 border border-gray-100 text-gray-900 rounded-2xl py-4 pr-12 pl-4 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition"
+                    value={pickup}
+                    onChange={(e) => setPickup(e.target.value)}
+                  />
+                </div>
+                
+                <div className="relative">
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
+                    <MapPin className="text-red-500" size={20} />
+                  </div>
+                  <input 
+                    type="text" 
+                    placeholder="إلى أين تريد الذهاب؟ (مثال: غار حراء)"
+                    className="w-full bg-gray-50 border border-gray-100 text-gray-900 rounded-2xl py-4 pr-12 pl-4 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-200 transition"
+                    value={dropoff}
+                    onChange={(e) => setDropoff(e.target.value)}
+                  />
+                </div>
+                
+                <button className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-bold text-lg py-4 rounded-2xl hover:shadow-[0_10px_25px_rgba(234,88,12,0.3)] hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
+                  <Search size={24} />
+                  ابحث عن سائق
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative z-10 hidden lg:block">
+            {/* Abstract Decorative Cards representing rides/destinations */}
+            <div className="relative w-full h-[500px]">
+              {mazarat.map((place, idx) => (
+                <div 
+                  key={idx} 
+                  className={`absolute bg-white p-5 rounded-3xl shadow-xl border border-gray-50 w-72 backdrop-blur-sm transition-transform hover:scale-105 cursor-pointer
+                    ${idx === 0 ? 'top-10 right-0 z-30' : idx === 1 ? 'top-40 left-10 z-20' : 'bottom-10 right-20 z-10'}
+                  `}
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="bg-orange-100 text-orange-600 p-2 rounded-xl">
+                      <MapPin size={24} />
+                    </div>
+                    <div className="flex items-center text-yellow-500 text-sm font-bold bg-yellow-50 px-2 py-1 rounded-lg">
+                      {place.rating} <Star size={14} className="fill-yellow-500 mr-1" />
                     </div>
                   </div>
-                </div>
-
-                {order.status === 'active' ? (
-                   <div className="flex gap-2">
-                     <button className="bg-white p-2 rounded-full shadow-sm text-gray-600 hover:text-orange-500 transition-colors">
-                       <Phone size={16} />
-                     </button>
-                     <button className="bg-gradient-to-r from-orange-500 to-red-500 text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:shadow-lg transition-all">
-                       تتبع الطلب
-                     </button>
-                   </div>
-                ) : (
-                  <div className="flex items-center text-green-600 text-xs font-bold bg-green-100 px-3 py-1.5 rounded-full">
-                    <CheckCircle2 size={14} className="ml-1" /> مكتمل
+                  <h3 className="text-lg font-bold mb-1">{place.name}</h3>
+                  <p className="text-gray-500 text-sm mb-4">رحلة مباشرة مريحة</p>
+                  <div className="flex justify-between items-center border-t border-gray-100 pt-4">
+                    <span className="text-sm text-gray-500">يبدأ من</span>
+                    <span className="text-xl font-black text-red-600">{place.price} <span className="text-sm font-bold">د.ج</span></span>
                   </div>
-                )}
-              </div>
+                </div>
+              ))}
             </div>
-          ))}
-          
-          {orders.filter(o => o.status === activeTab).length === 0 && (
-            <div className="text-center py-10 text-gray-400">
-              لا توجد طلبات في هذا القسم
-            </div>
-          )}
-        </div>
+          </div>
 
-      </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl lg:text-4xl font-black mb-4">لماذا تختار مزار؟</h2>
+            <p className="text-gray-500 max-w-2xl mx-auto text-lg">صممنا خدمتنا خصيصاً لتلبية احتياجات المعتمرين والحجاج بكل أريحية وثقة.</p>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="p-8 rounded-3xl bg-orange-50 border border-orange-100 hover:-translate-y-2 transition-transform">
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-orange-600 mb-6 shadow-sm">
+                <Wallet size={32} />
+              </div>
+              <h3 className="text-xl font-bold mb-3">الدفع بالدينار الجزائري</h3>
+              <p className="text-gray-600 leading-relaxed">
+                لا داعي للقلق حول تحويل العملات. يمكنك الدفع بسهولة وأمان عبر بطاقتك باستخدام Chargily بالدينار الجزائري مباشرة.
+              </p>
+            </div>
+
+            <div className="p-8 rounded-3xl bg-red-50 border border-red-100 hover:-translate-y-2 transition-transform">
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-red-600 mb-6 shadow-sm">
+                <ShieldCheck size={32} />
+              </div>
+              <h3 className="text-xl font-bold mb-3">سائقون موثوقون</h3>
+              <p className="text-gray-600 leading-relaxed">
+                جميع السائقين مسجلون ومعتمدون لضمان أقصى درجات الأمان والراحة خلال تنقلاتك في البقاع المقدسة.
+              </p>
+            </div>
+
+            <div className="p-8 rounded-3xl bg-yellow-50 border border-yellow-100 hover:-translate-y-2 transition-transform">
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-yellow-600 mb-6 shadow-sm">
+                <Car size={32} />
+              </div>
+              <h3 className="text-xl font-bold mb-3">سيارات مريحة</h3>
+              <p className="text-gray-600 leading-relaxed">
+                أسطول سيارات حديث ومكيف يتسع للأفراد والعائلات، لضمان راحتك خاصة بعد أداء المناسك.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
     </div>
   );
 }
