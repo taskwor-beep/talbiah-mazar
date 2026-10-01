@@ -81,7 +81,8 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         activeRideRef.current = newActiveRide;
       } else {
         if (activeRideRef.current && activeRideRef.current.status === 'driver_offered') {
-          setRejectedOrders(prev => [...prev, activeRideRef.current.id]);
+          const rejectedId = activeRideRef.current.id;
+          setRejectedOrders(prev => [...prev, rejectedId]);
         } else if (activeRideRef.current && activeRideRef.current.status === 'accepted') {
           toast.error('تم إلغاء الرحلة.');
         }
