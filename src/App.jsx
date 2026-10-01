@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MapPin, Navigation, Car, ShieldCheck, Wallet, Search, Star, X, User } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
+import { supabase } from './lib/supabase';
 import PilgrimDashboard from './components/PilgrimDashboard';
 import DriverDashboard from './components/DriverDashboard';
 
@@ -30,20 +31,55 @@ export default function App() {
     setIsAuthModalOpen(false);
   };
 
-  const handleAuthSubmit = (e) => {
+  const handleAuthSubmit = async (e) => {
     e.preventDefault();
-    // Simulate auth success
-    const nameInput = e.target.querySelector('input[type="text"]');
-    const isDriver = authType.includes('driver');
-    let defaultName = isDriver ? 'كابتن مزار' : 'مستخدم مزار';
-    setUserName(nameInput && nameInput.value ? nameInput.value : defaultName);
-    setUserRole(isDriver ? 'driver' : 'pilgrim');
-    setIsLoggedIn(true);
-    closeAuthModal();
-    toast.success(
-      authType === 'pilgrim_login' ? 'تم تسجيل الدخول بنجاح!' : 'تم إنشاء الحساب بنجاح!',
-      { position: 'top-center', duration: 4000 }
-    );
+    const phoneInput = e.target.querySelector('input[type="tel"]').value;
+    const passwordInput = e.target.querySelector('input[type="password"]').value;
+    const nameInput = e.target.querySelector('input[type="text"]')?.value;
+
+    const toastId = toast.loading('جاري التحقق...');
+
+    try {
+      if (authType === 'pilgrim_register' || authType === 'driver_register') {
+        const role = authType === 'driver_register' ? 'driver' : 'pilgrim';
+        
+        const { data, error } = await supabase.from('users').insert([{
+          full_name: nameInput,
+          phone_number: phoneInput,
+          password_hash: passwordInput,
+          role: role
+        }]).select().single();
+        
+        if (error) throw error;
+        
+        if (role === 'driver') {
+           const vehicleSelect = e.target.querySelector('select').value;
+           await supabase.from('drivers').insert([{ user_id: data.id, vehicle_type: vehicleSelect }]);
+        }
+        
+        setUserName(data.full_name);
+        setUserRole(data.role);
+        setIsLoggedIn(true);
+        closeAuthModal();
+        toast.success('تم إنشاء الحساب بنجاح!', { id: toastId });
+      } else {
+         const { data, error } = await supabase.from('users')
+           .select('*')
+           .eq('phone_number', phoneInput)
+           .eq('password_hash', passwordInput)
+           .single();
+           
+         if (error || !data) throw new Error('رقم الهاتف أو كلمة المرور غير صحيحة');
+         
+         setUserName(data.full_name);
+         setUserRole(data.role);
+         setIsLoggedIn(true);
+         closeAuthModal();
+         toast.success('تم تسجيل الدخول بنجاح!', { id: toastId });
+      }
+    } catch (err) {
+      toast.error(err.message || 'حدث خطأ غير متوقع', { id: toastId });
+    }
   };
 
   const handleLogout = () => {
