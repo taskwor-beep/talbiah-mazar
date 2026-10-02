@@ -46,14 +46,21 @@ serve(async (req) => {
 
     // Handle Chargily V2 Events
     if (event.type === 'checkout.paid') {
-       const metadata = event.data.metadata;
-       
-       if (metadata && metadata.order_id) {
-         // Update the order status to paid (or completed/accepted depending on flow)
+       // metadata is an array in Chargily V2 checkouts, but sometimes returned as object. Safely extract bookingId.
+       let bookingId = null;
+       if (Array.isArray(event.data.metadata)) {
+         const metaObj = event.data.metadata.find((m: any) => m.booking_id);
+         if (metaObj) bookingId = metaObj.booking_id;
+       } else if (event.data.metadata?.booking_id) {
+         bookingId = event.data.metadata.booking_id;
+       }
+
+       if (bookingId) {
+         // Update the order status to accepted so the driver gets notified
          const { error } = await supabase
            .from('orders')
-           .update({ payment_status: 'paid' }) // You can add payment_status if it exists, or use status
-           .eq('id', metadata.order_id);
+           .update({ status: 'accepted', payment_status: 'paid' }) 
+           .eq('id', bookingId);
            
          if (error) {
             console.error('Error updating order:', error);

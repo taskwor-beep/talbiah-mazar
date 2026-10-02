@@ -179,9 +179,28 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   };
 
   const acceptOffer = async () => {
-    toast.success('تم قبول العرض! الدفع قيد المعالجة عبر Chargily...');
-    await supabase.from('orders').update({ status: 'accepted' }).eq('id', currentOrderId);
-    setRideStatus('active');
+    toast.loading('جاري تجهيز الدفع عبر Chargily...', { id: 'payment' });
+    try {
+      const { data, error } = await supabase.functions.invoke('chargily-checkout', {
+        body: {
+          bookingId: currentOrderId,
+          amount: offeredRide.total_amount,
+          successUrl: window.location.href,
+          failureUrl: window.location.href,
+          webhookEndpoint: `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chargily-webhook`,
+          customerName: userName,
+        }
+      });
+      if (error) throw new Error(error.message);
+      if (data && data.checkout_url) {
+        toast.dismiss('payment');
+        window.location.href = data.checkout_url;
+      } else {
+        throw new Error('لم يتم إرجاع رابط الدفع.');
+      }
+    } catch (err) {
+      toast.error('حدث خطأ أثناء إعداد الدفع: ' + err.message, { id: 'payment' });
+    }
   };
 
   const rejectOffer = async () => {

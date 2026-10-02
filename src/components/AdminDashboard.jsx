@@ -12,7 +12,7 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
   const [offers, setOffers] = useState([]);
   
   const [settings, setSettings] = useState({
-    exchange_rate: { dzd_to_sar: 0.028 },
+    exchange_rate: { sar_to_dzd: 35 },
     social_popup: { is_active: false, title: "تابعنا على المنصات الاجتماعية!", description: "اشترك الآن ليصلك كل جديد عن عروض مزار.", link: "https://twitter.com", frequency: 'once', version: 1 },
     ad_popup: { is_active: true, title: "إعلان هام", description: "احجز باقتك الآن واحصل على خصم 10% بمناسبة الموسم!", image_url: "", frequency: 'always', version: 1 }
   });
@@ -326,7 +326,7 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
                     <h3 className="text-xl font-black text-slate-800 mb-2">{offer.title}</h3>
                     <p className="text-slate-500 text-sm mb-4">{offer.details}</p>
                     <div className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-500">
-                      {offer.priceDZD} د.ج <span className="text-sm font-bold text-slate-400">({(offer.priceDZD * settings.exchange_rate.dzd_to_sar).toFixed(2)} ريال)</span>
+                      {offer.priceDZD} د.ج <span className="text-sm font-bold text-slate-400">({(offer.priceDZD / (settings.exchange_rate?.sar_to_dzd || 35)).toFixed(2)} ريال)</span>
                     </div>
                   </div>
                   <div className="flex gap-3 w-full md:w-auto">
@@ -359,16 +359,16 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
               <h3 className="text-xl font-black text-slate-800 mb-4 flex items-center gap-2">
                 <span className="bg-green-100 text-green-600 p-2 rounded-xl"><Star size={20} /></span>
-                سعر صرف الدينار مقابل الريال
+                سعر صرف الريال مقابل الدينار
               </h3>
               <div className="flex items-end gap-4 max-w-md">
                 <div className="flex-1">
-                  <label className="block text-sm font-bold text-gray-500 mb-2">1 دينار جزائري يساوي (بالريال)</label>
+                  <label className="block text-sm font-bold text-gray-500 mb-2">1 ريال سعودي يساوي (بالدينار)</label>
                   <input 
                     type="number" 
-                    step="0.001"
-                    value={settings.exchange_rate.dzd_to_sar} 
-                    onChange={e => handleSettingChange('exchange_rate', 'dzd_to_sar', parseFloat(e.target.value))}
+                    step="0.01"
+                    value={settings.exchange_rate?.sar_to_dzd || 35} 
+                    onChange={e => handleSettingChange('exchange_rate', 'sar_to_dzd', parseFloat(e.target.value))}
                     className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-orange-500 font-bold" 
                   />
                 </div>

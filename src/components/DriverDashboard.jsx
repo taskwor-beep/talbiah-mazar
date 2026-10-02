@@ -294,7 +294,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       await supabase.from('orders').update({ status: 'delivered' }).eq('id', activeRide.id);
     }
     setActiveRide(null);
-    toast.success('تم إنهاء الرحلة بنجاح. أضيف الرصيد لمحفظتك.');
+    toast.success('تم إنهاء الرحلة بنجاح.');
     fetchDriverData(); // Refresh stats
   };
 
@@ -378,12 +378,8 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
           </div>
         </div>
 
-        {/* Earnings Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1">
-            <span className="text-gray-400 text-sm font-bold mb-1">أرباح اليوم</span>
-            <span className="text-3xl font-black text-green-600">{stats.earnings} <span className="text-sm">د.ج</span></span>
-          </div>
+        {/* Ride Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-2 gap-4 mb-8">
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1">
             <span className="text-gray-400 text-sm font-bold mb-1">الرحلات المكتملة</span>
             <span className="text-3xl font-black text-gray-800">{stats.completedRides}</span>
@@ -391,10 +387,6 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1">
             <span className="text-gray-400 text-sm font-bold mb-1">التقييم العام</span>
             <span className="text-3xl font-black text-yellow-500">{stats.rating} ★</span>
-          </div>
-          <div onClick={handleWalletClick} className="bg-gradient-to-br from-green-500 to-emerald-600 p-6 rounded-3xl shadow-md text-white flex flex-col justify-center items-center cursor-pointer hover:shadow-lg transition hover:-translate-y-1">
-            <DollarSign size={28} className="mb-2 opacity-90" />
-            <span className="font-bold text-lg">سحب الرصيد</span>
           </div>
         </div>
 
@@ -601,7 +593,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
 
             {activeRide.status === 'accepted' ? (
               <button onClick={finishRide} className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black text-xl py-5 rounded-2xl shadow-[0_10px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_15px_30px_rgba(34,197,94,0.4)] hover:-translate-y-1 transition">
-                إنهاء الرحلة وتحصيل المبلغ
+                إنهاء الرحلة
               </button>
             ) : (
               <div className="text-center p-4 bg-orange-50 text-orange-600 rounded-xl font-bold animate-pulse">
