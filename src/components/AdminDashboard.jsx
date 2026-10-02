@@ -14,7 +14,8 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
   const [settings, setSettings] = useState({
     exchange_rate: { sar_to_dzd: 35 },
     social_popup: { is_active: false, title: "تابعنا على المنصات الاجتماعية!", description: "اشترك الآن ليصلك كل جديد عن عروض مزار.", link: "https://twitter.com", frequency: 'once', version: 1 },
-    ad_popup: { is_active: true, title: "إعلان هام", description: "احجز باقتك الآن واحصل على خصم 10% بمناسبة الموسم!", image_url: "", frequency: 'always', version: 1 }
+    ad_popup: { is_active: true, title: "إعلان هام", description: "احجز باقتك الآن واحصل على خصم 10% بمناسبة الموسم!", image_url: "", frequency: 'always', version: 1 },
+    whatsapp_notify: { is_active: false, api_key: "", phone: "", template: "طلب جديد من {customer_name}!\nالرحلة: من {pickup} إلى {dropoff}" }
   });
   
   const [loading, setLoading] = useState(true);
@@ -483,6 +484,49 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
                   </div>
                 </div>
                 
+              </div>
+              
+              {/* WhatsApp Notify Setting */}
+              <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group md:col-span-2">
+                <div className="absolute -left-10 -top-10 w-40 h-40 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full opacity-10 group-hover:scale-150 transition-transform duration-500"></div>
+                
+                <div className="flex justify-between items-start mb-6 relative z-10">
+                  <div className="w-16 h-16 bg-green-50 text-green-500 rounded-2xl flex items-center justify-center">
+                    <Smartphone size={32} />
+                  </div>
+                  <button 
+                    onClick={() => toggleSetting('whatsapp_notify')}
+                    className={`w-14 h-8 rounded-full flex items-center p-1 transition-colors duration-300 ${settings.whatsapp_notify?.is_active ? 'bg-green-500' : 'bg-gray-200'}`}
+                  >
+                    <div className={`w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ${settings.whatsapp_notify?.is_active ? '-translate-x-6' : 'translate-x-0'}`}></div>
+                  </button>
+                </div>
+                
+                <h3 className="text-2xl font-black text-slate-800 mb-3 relative z-10">إشعارات الواتساب (CallMeBot المجانية)</h3>
+                <p className="text-slate-500 leading-relaxed relative z-10 mb-6">
+                  تفعيل إرسال إشعارات للإدارة عبر الواتساب عند إنشاء طلب جديد. استخدم الخدمة المجانية CallMeBot. 
+                  للحصول على الـ API Key أرسل رسالة واتساب إلى <span dir="ltr" className="font-bold">+34 693 543 938</span> (أو ابحث عن CallMeBot api) تحتوي على الكلمة: <span className="font-mono text-green-600 font-bold">I allow callmebot to send me messages</span>
+                </p>
+
+                <div className="grid md:grid-cols-2 gap-4 relative z-10">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">رقم الهاتف المستلم (مع رمز الدولة بدون +)</label>
+                    <input type="text" value={settings.whatsapp_notify?.phone || ''} onChange={e => handleSettingChange('whatsapp_notify', 'phone', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-500" dir="ltr" placeholder="مثال: 966500000000" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">الـ API Key من CallMeBot</label>
+                    <input type="text" value={settings.whatsapp_notify?.api_key || ''} onChange={e => handleSettingChange('whatsapp_notify', 'api_key', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-green-500" dir="ltr" placeholder="مثال: 123456" />
+                  </div>
+                  <div className="md:col-span-2 mt-4">
+                    <label className="block text-xs font-bold text-gray-500 mb-1">نص الرسالة (المتغيرات المتاحة: {'{customer_name}, {pickup}, {dropoff}'})</label>
+                    <textarea value={settings.whatsapp_notify?.template || ''} onChange={e => handleSettingChange('whatsapp_notify', 'template', e.target.value)} className="w-full bg-slate-50 border border-gray-200 rounded-lg px-3 py-3 text-sm outline-none focus:border-green-500 resize-none h-24" dir="rtl"></textarea>
+                  </div>
+                  <div className="md:col-span-2 mt-2">
+                    <button onClick={() => saveSettings('whatsapp_notify')} className="w-full bg-green-50 text-green-600 font-bold py-3 rounded-xl hover:bg-green-100 transition flex justify-center items-center gap-2">
+                      <Save size={20} /> حفظ إعدادات الواتساب
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

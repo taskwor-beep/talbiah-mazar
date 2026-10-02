@@ -174,6 +174,15 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
       if (data && data.length > 0) {
         setCurrentOrderId(data[0].id);
         toast.success('تم إنشاء طلبك! نحن بانتظار عروض السائقين.');
+        
+        // Trigger WhatsApp Admin Notification in background
+        supabase.functions.invoke('whatsapp-notify', {
+          body: {
+            customer_name: userName,
+            pickup: finalPickup,
+            dropoff: finalDropoff
+          }
+        }).catch(err => console.error('Failed to trigger whatsapp notify:', err));
       }
     }
   };
