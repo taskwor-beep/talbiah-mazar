@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Settings, List as ListIcon, Check, X, Megaphone, Smartphone, Star, Search, Shield, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
+import Footer from './Footer';
 
 export default function AdminDashboard({ userName, onLogout, onGoHome }) {
   const [activeTab, setActiveTab] = useState('users');
@@ -486,6 +487,10 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
             </div>
           </div>
         )}
+        
+        <div className="mt-12">
+          <Footer />
+        </div>
       </main>
 
       {/* Mobile Bottom Navigation */}

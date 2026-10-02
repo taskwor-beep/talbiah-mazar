@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapPin, Navigation, Clock, CreditCard, User, LogOut, CheckCircle2, Navigation2, Home, Search as SearchIcon, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
+import Footer from './Footer';
 
 export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [rideStatus, setRideStatus] = useState('idle'); // idle, requesting, active
@@ -523,25 +524,8 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                 رحلاتي السابقة
               </h3>
               <div className="space-y-4">
-                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 hover:border-orange-200 transition">
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="font-black text-gray-800">إلى: جبل ثور</span>
-                    <span className="text-green-600 font-bold text-xs bg-green-100 px-2 py-1 rounded">مكتملة</span>
-                  </div>
-                  <div className="flex justify-between text-gray-500 text-sm font-bold">
-                    <span>الأمس</span>
-                    <span className="text-gray-800">1200 د.ج</span>
-                  </div>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 hover:border-orange-200 transition">
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="font-black text-gray-800">إلى: محطة قطار الحرمين</span>
-                    <span className="text-green-600 font-bold text-xs bg-green-100 px-2 py-1 rounded">مكتملة</span>
-                  </div>
-                  <div className="flex justify-between text-gray-500 text-sm font-bold">
-                    <span>منذ 3 أيام</span>
-                    <span className="text-gray-800">3500 د.ج</span>
-                  </div>
+                <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 text-center text-gray-500 font-bold">
+                  لا توجد رحلات سابقة
                 </div>
               </div>
             </div>
@@ -559,6 +543,10 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
             </div>
           </div>
 
+        </div>
+        
+        <div className="mt-12">
+          <Footer />
         </div>
       </main>
     </div>

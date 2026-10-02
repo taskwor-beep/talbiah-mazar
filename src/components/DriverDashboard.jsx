@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet, Plus, Trash2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
+import Footer from './Footer';
 
 export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [isOnline, setIsOnline] = useState(true);
@@ -669,6 +670,10 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         )}
         </>
         )}
+        
+        <div className="mt-12">
+          <Footer />
+        </div>
 
       </main>
 
