@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Settings, List as ListIcon, Check, X, Megaphone, Smartphone, Star, Search, Shield, Save } from 'lucide-react';
+import { Users, UserPlus, Settings, List as ListIcon, Check, X, Megaphone, Smartphone, Star, Search, Shield, Save, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';

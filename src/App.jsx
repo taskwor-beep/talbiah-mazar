@@ -406,6 +406,7 @@ export default function App() {
                     type="password" 
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition"
                     placeholder="********"
+                    autoComplete="current-password"
                   />
                 </div>
 
