@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
 import RideMap from './RideMap';
+import { setOneSignalRole, requestNotificationPermission, sendPushNotification } from '../lib/onesignal';
 
 export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [rideStatus, setRideStatus] = useState('idle'); // idle, requesting, active
@@ -19,6 +20,8 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [availableOffers, setAvailableOffers] = useState([]);
 
   useEffect(() => {
+    setOneSignalRole('pilgrim', userName);
+    requestNotificationPermission();
     fetchData();
   }, []);
 
@@ -184,6 +187,14 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
             dropoff: finalDropoff
           }
         }).catch(err => console.error('Failed to trigger whatsapp notify:', err));
+
+        // Trigger OneSignal Push Notification to all Drivers in background
+        sendPushNotification({
+          title: 'طلب مشوار جديد 🚗',
+          message: `المعتمر ${userName} يطلب مشواراً: من ${finalPickup} إلى ${finalDropoff}`,
+          targetRole: 'driver',
+          targetUrl: '/'
+        }).catch(err => console.error('Failed to trigger OneSignal push:', err));
       }
     }
   };

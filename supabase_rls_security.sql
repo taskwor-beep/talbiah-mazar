@@ -14,6 +14,18 @@ ALTER TABLE public.driver_offers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.driver_packages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.package_steps ENABLE ROW LEVEL SECURITY;
 
+-- 2. Ensure all required columns exist (Fixes column "status" does not exist error)
+ALTER TABLE public.drivers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'cash';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'pending';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS total_amount DECIMAL(10,2) DEFAULT 0.00;
+ALTER TABLE public.driver_offers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE public.driver_packages ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE public.driver_packages ADD COLUMN IF NOT EXISTS discount_dzd DECIMAL(10,2) DEFAULT 0.00;
+ALTER TABLE public.driver_packages ADD COLUMN IF NOT EXISTS details TEXT;
+ALTER TABLE public.driver_offers ADD COLUMN IF NOT EXISTS details TEXT;
+
 -- 2. Drop existing policies if any to avoid duplicates
 DROP POLICY IF EXISTS "Public read users" ON public.users;
 DROP POLICY IF EXISTS "Users can insert/register" ON public.users;

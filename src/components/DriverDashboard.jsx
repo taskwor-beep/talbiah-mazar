@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import Footer from './Footer';
 import RideMap from './RideMap';
 import { playNewOrderAlert, playSuccessChime } from '../lib/sound';
+import { setOneSignalRole, requestNotificationPermission } from '../lib/onesignal';
 
 export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [isOnline, setIsOnline] = useState(true);
@@ -35,6 +36,8 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const activeRideRef = React.useRef(null);
 
   useEffect(() => {
+    setOneSignalRole('driver', userName);
+    requestNotificationPermission();
     fetchDriverData();
   }, [userName]);
 

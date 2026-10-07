@@ -73,3 +73,41 @@ export function setOneSignalRole(role, userName) {
     }
   });
 }
+
+const ONESIGNAL_REST_KEY = import.meta.env.VITE_ONESIGNAL_REST_API_KEY || '';
+
+/**
+ * Send push notification to target role ('driver' or 'pilgrim')
+ */
+export async function sendPushNotification({ title, message, targetRole = 'driver', targetUrl = '/' }) {
+  if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_KEY) return;
+  try {
+    const payload = {
+      app_id: ONESIGNAL_APP_ID,
+      filters: [
+        { field: 'tag', key: 'role', relation: '=', value: targetRole }
+      ],
+      headings: {
+        ar: title,
+        en: title
+      },
+      contents: {
+        ar: message,
+        en: message
+      },
+      url: targetUrl
+    };
+
+    await fetch('https://onesignal.com/api/v1/notifications', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${ONESIGNAL_REST_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    console.warn('Error sending OneSignal push:', err);
+  }
+}
+
