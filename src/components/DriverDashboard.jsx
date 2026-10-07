@@ -289,16 +289,50 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   };
 
   const acceptRide = async (ride) => {
+    toast.loading('جاري قبول الطلب وتحديد موقعك...', { id: 'accept' });
+
+    // تحديد موقع السائق بدقة فور قبول الطلب
+    let driverGps = myDriverCoords;
+    if (navigator.geolocation) {
+      try {
+        const freshCoords = await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve([pos.coords.latitude, pos.coords.longitude]),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 6000 }
+          );
+        });
+        if (freshCoords) {
+          driverGps = freshCoords;
+          setMyDriverCoords(freshCoords);
+        }
+      } catch (e) {}
+    }
+
+    // حفظ موقع السائق في قاعدة البيانات فور القبول
+    if (driverId && driverGps) {
+      await supabase.from('drivers').update({
+        current_latitude: driverGps[0],
+        current_longitude: driverGps[1],
+        is_online: true
+      }).eq('id', driverId);
+    }
+
     if (ride.price !== 'قابل للتفاوض' && ride.price > 0) {
       // It's a pre-priced offer or package, accept directly
-      const { error } = await supabase.from('orders').update({ driver_id: driverId, status: 'accepted' }).eq('id', ride.id);
+      const { error } = await supabase.from('orders').update({ 
+        driver_id: driverId, 
+        status: 'accepted' 
+      }).eq('id', ride.id);
+
       if (error) {
-        toast.error('خطأ من قاعدة البيانات: ' + error.message);
+        toast.error('خطأ من قاعدة البيانات: ' + error.message, { id: 'accept' });
       } else {
-        toast.success('تم استلام الطلب! انطلق نحو العميل.');
+        toast.success('تم قبول الطلب وتحديد موقعك بنجاح! انطلق نحو العميل.', { id: 'accept' });
         fetchDriverData();
       }
     } else {
+      toast.dismiss('accept');
       // Custom ride, show custom modal
       setPricePrompt(ride);
       setNewOfferPrice('');
@@ -308,6 +342,34 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const submitPriceOffer = async (e) => {
     e.preventDefault();
     if (newOfferPrice && !isNaN(newOfferPrice) && Number(newOfferPrice) > 0) {
+      toast.loading('جاري إرسال العرض وتحديد موقعك...', { id: 'offer' });
+
+      // تحديد موقع السائق بدقة فور إرسال العرض وقبول الطلب
+      let driverGps = myDriverCoords;
+      if (navigator.geolocation) {
+        try {
+          const freshCoords = await new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => resolve([pos.coords.latitude, pos.coords.longitude]),
+              () => resolve(null),
+              { enableHighAccuracy: true, timeout: 6000 }
+            );
+          });
+          if (freshCoords) {
+            driverGps = freshCoords;
+            setMyDriverCoords(freshCoords);
+          }
+        } catch (err) {}
+      }
+
+      if (driverId && driverGps) {
+        await supabase.from('drivers').update({
+          current_latitude: driverGps[0],
+          current_longitude: driverGps[1],
+          is_online: true
+        }).eq('id', driverId);
+      }
+
       const { error } = await supabase.from('orders').update({ 
         driver_id: driverId, 
         status: 'driver_offered', 
@@ -315,9 +377,9 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       }).eq('id', pricePrompt.id);
       
       if (error) {
-        toast.error('خطأ من قاعدة البيانات: ' + error.message);
+        toast.error('خطأ من قاعدة البيانات: ' + error.message, { id: 'offer' });
       } else {
-        toast.success('تم إرسال عرضك للمعتمر! في انتظار موافقته.');
+        toast.success('تم إرسال عرضك وتحديد موقعك بنجاح! في انتظار موافقة المعتمر.', { id: 'offer' });
         setPricePrompt(null);
         setNewOfferPrice('');
         fetchDriverData();

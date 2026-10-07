@@ -102,6 +102,9 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
         setCurrentOrderId(activeOrder.id);
         setPickup(activeOrder.pickup_address);
         setDropoff(activeOrder.dropoff_address);
+        if (activeOrder.pickup_latitude && activeOrder.pickup_longitude) {
+          setLocationCoords({ lat: activeOrder.pickup_latitude, lng: activeOrder.pickup_longitude });
+        }
         setCurrentOrderType(activeOrder.driver_id ? 'direct' : 'search');
         
         if (activeOrder.status === 'driver_offered') {
@@ -161,11 +164,11 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const handleRequestRide = async (type = 'search', predefinedData = null) => {
     let finalPickup = pickup;
     let finalDropoff = dropoff;
-    let price = null; // No fake price for search
+    let price = null;
     let targetDriverId = null;
     
     if (type !== 'search' && predefinedData) {
-       finalPickup = predefinedData.pickup;
+       finalPickup = predefinedData.pickup || pickup || 'موقعي الحالي';
        finalDropoff = predefinedData.dropoff;
        price = predefinedData.price;
        targetDriverId = predefinedData.driver_id;
@@ -173,10 +176,37 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
 
     if (!finalPickup || !finalDropoff) return toast.error('يرجى تحديد نقطة الانطلاق والوجهة');
     
+    toast.loading('جاري تحديد موقعك وإنشاء الطلب...', { id: 'order-create' });
     setCurrentOrderType(type);
     setRideStatus('requesting');
     setOfferedRide(null);
-    
+
+    // 1. تحديد موقع المعتمر بدقة عند إنشاء الطلب
+    let orderCoords = locationCoords;
+    if (navigator.geolocation) {
+      try {
+        const freshPos = await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () => resolve(null),
+            { enableHighAccuracy: true, timeout: 6000 }
+          );
+        });
+        if (freshPos) {
+          orderCoords = freshPos;
+          setLocationCoords(freshPos);
+        }
+      } catch (e) {}
+    }
+
+    // استخراج الإحداثيات إن كانت مدونة في العنوان
+    if (!orderCoords && finalPickup) {
+      const match = finalPickup.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+      if (match) {
+        orderCoords = { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+      }
+    }
+
     // Get real user ID or fallback
     let customerId = null;
     if (userName) {
@@ -195,9 +225,11 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
       dropoff_address: finalDropoff,
       status: targetDriverId ? 'pending_driver_approval' : 'pending',
       total_amount: price || 0,
-      pickup_latitude: locationCoords?.lat,
-      pickup_longitude: locationCoords?.lng
+      pickup_latitude: orderCoords?.lat || null,
+      pickup_longitude: orderCoords?.lng || null
     }]).select();
+
+    toast.dismiss('order-create');
     
     if (error) {
       toast.error('خطأ في إنشاء الطلب: ' + error.message);
@@ -635,7 +667,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                     </div>
                   </div>
                   <button onClick={() => {
-                    handleRequestRide('package', { pickup: 'جولة سياحية', dropoff: selectedPackage.title, price: selectedPackage.totalPrice, driver_id: selectedPackage.driver_id });
+                    handleRequestRide('package', { pickup: pickup || 'موقعي الحالي', dropoff: selectedPackage.title, price: selectedPackage.totalPrice, driver_id: selectedPackage.driver_id });
                   }} className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all">
                     حجز الباقة الآن
                   </button>
