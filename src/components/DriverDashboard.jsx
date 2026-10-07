@@ -297,9 +297,16 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   };
 
   const acceptRide = async (ride) => {
+    // إذا كان الطلب قابلاً للتفاوض أو بدون سعر مسبق، نفتح نافذة إدخال السعر أولاً ولا نطلب GPS الآن لئلا يُطلب مرتين
+    if (ride.price === 'قابل للتفاوض' || !ride.price || Number(ride.price) <= 0) {
+      setPricePrompt(ride);
+      setNewOfferPrice('');
+      return;
+    }
+
+    // الطلب محدد السعر مسبقاً (باقة أو عرض ثابت)، يتم تحديد الموقع والقبول مباشرة
     toast.loading('جاري قبول الطلب وتحديد موقعك...', { id: 'accept' });
 
-    // تحديد موقع السائق بدقة فور قبول الطلب
     let driverGps = myDriverCoords;
     try {
       const fresh = await getReliablePosition();
@@ -318,24 +325,16 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       }).eq('id', driverId);
     }
 
-    if (ride.price !== 'قابل للتفاوض' && ride.price > 0) {
-      // It's a pre-priced offer or package, accept directly
-      const { error } = await supabase.from('orders').update({ 
-        driver_id: driverId, 
-        status: 'accepted' 
-      }).eq('id', ride.id);
+    const { error } = await supabase.from('orders').update({ 
+      driver_id: driverId, 
+      status: 'accepted' 
+    }).eq('id', ride.id);
 
-      if (error) {
-        toast.error('خطأ من قاعدة البيانات: ' + error.message, { id: 'accept' });
-      } else {
-        toast.success('تم قبول الطلب وتحديد موقعك بنجاح! انطلق نحو العميل.', { id: 'accept' });
-        fetchDriverData();
-      }
+    if (error) {
+      toast.error('خطأ من قاعدة البيانات: ' + error.message, { id: 'accept' });
     } else {
-      toast.dismiss('accept');
-      // Custom ride, show custom modal
-      setPricePrompt(ride);
-      setNewOfferPrice('');
+      toast.success('تم قبول الطلب وتحديد موقعك بنجاح! انطلق نحو العميل.', { id: 'accept' });
+      fetchDriverData();
     }
   };
 
@@ -694,7 +693,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
 
             <RideMap 
               driverCoords={myDriverCoords}
-              height="240px"
+              height="340px"
             />
 
             {myDriverCoords ? (
@@ -741,7 +740,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
               dropoffAddress={activeRide.dropoff} 
               pickupCoords={activeRide.lat && activeRide.lng ? [activeRide.lat, activeRide.lng] : null}
               driverCoords={myDriverCoords}
-              height="240px"
+              height="360px"
               className="mb-6"
             />
 

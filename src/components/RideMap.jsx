@@ -50,7 +50,7 @@ export default function RideMap({
   driverCoords = null,
   pickupCoords = null,
   dropoffCoords = null,
-  height = '280px',
+  height = '340px',
   className = '',
   showControls = true
 }) {
@@ -58,6 +58,7 @@ export default function RideMap({
   const mapInstanceRef = useRef(null);
   const [geocodedPickup, setGeocodedPickup] = useState(null);
   const [geocodedDropoff, setGeocodedDropoff] = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Stored coordinate refs for instant camera flying/focus
   const pCoordsRef = useRef(null);
@@ -110,6 +111,39 @@ export default function RideMap({
     };
   }, [pickupAddress, dropoffAddress, pickupCoords, dropoffCoords]);
 
+  // Handle map resize and body scroll on fullscreen toggle
+  useEffect(() => {
+    if (isFullscreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    const handleResize = () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+        if (boundsPointsRef.current.length > 1) {
+          mapInstanceRef.current.fitBounds(L.latLngBounds(boundsPointsRef.current), { padding: [50, 50] });
+        }
+      }
+    };
+
+    const t1 = setTimeout(handleResize, 100);
+    const t2 = setTimeout(handleResize, 350);
+
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [isFullscreen]);
+
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
@@ -134,7 +168,7 @@ export default function RideMap({
       const map = L.map(mapContainerRef.current, {
         zoomControl: false,
         attributionControl: false
-      }).setView(initialCenter, 13);
+      }).setView(initialCenter, 14);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19
@@ -160,12 +194,12 @@ export default function RideMap({
       const pickupIcon = L.divIcon({
         className: 'custom-map-marker',
         html: `
-          <div style="background-color: #16a34a; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 3px solid #ffffff;">
-            <span style="color: white; font-size: 13px; font-weight: bold;">أ</span>
+          <div style="background-color: #16a34a; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 3px solid #ffffff;">
+            <span style="color: white; font-size: 14px; font-weight: bold;">أ</span>
           </div>
         `,
-        iconSize: [34, 34],
-        iconAnchor: [17, 17]
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
       });
 
       L.marker(pCoords, { icon: pickupIcon })
@@ -179,12 +213,12 @@ export default function RideMap({
       const dropoffIcon = L.divIcon({
         className: 'custom-map-marker',
         html: `
-          <div style="background-color: #dc2626; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 3px solid #ffffff;">
-            <span style="color: white; font-size: 13px; font-weight: bold;">ب</span>
+          <div style="background-color: #dc2626; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 3px solid #ffffff;">
+            <span style="color: white; font-size: 14px; font-weight: bold;">ب</span>
           </div>
         `,
-        iconSize: [34, 34],
-        iconAnchor: [17, 17]
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
       });
 
       L.marker(dCoords, { icon: dropoffIcon })
@@ -198,12 +232,12 @@ export default function RideMap({
       const driverIcon = L.divIcon({
         className: 'custom-map-marker',
         html: `
-          <div style="background-color: #ea580c; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(234, 88, 12, 0.6); border: 3px solid #ffffff; animation: pulse 2s infinite;">
-            <span style="font-size: 22px;">🚗</span>
+          <div style="background-color: #ea580c; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(234, 88, 12, 0.6); border: 3px solid #ffffff; animation: pulse 2s infinite;">
+            <span style="font-size: 24px;">🚗</span>
           </div>
         `,
-        iconSize: [42, 42],
-        iconAnchor: [21, 21]
+        iconSize: [44, 44],
+        iconAnchor: [22, 22]
       });
 
       L.marker(validDriverCoords, { icon: driverIcon })
@@ -294,18 +328,52 @@ export default function RideMap({
 
   return (
     <div 
-      className={`relative w-full rounded-3xl overflow-hidden border border-orange-200 shadow-md z-0 ${className}`} 
-      style={{ height }}
+      className={isFullscreen 
+        ? 'fixed inset-0 z-[99999] h-screen w-screen bg-white' 
+        : `relative w-full rounded-3xl overflow-hidden border border-orange-200 shadow-md z-0 ${className}`
+      } 
+      style={{ height: isFullscreen ? '100vh' : height }}
     >
       <div ref={mapContainerRef} className="w-full h-full" />
       
-      {/* Top Status Badge */}
-      <div className="absolute top-3 right-3 z-[400] bg-white/95 backdrop-blur px-3 py-1.5 rounded-full text-xs font-black text-gray-800 shadow-sm border border-gray-100 flex items-center gap-1.5">
-        <span className={`w-2.5 h-2.5 rounded-full ${activePoints.hasDriver ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`}></span>
-        {activePoints.hasDriver ? '🚗 موقع السائق مباشر' : '📍 مسار الرحلة'}
-      </div>
+      {/* Top Header Bar when in Fullscreen */}
+      {isFullscreen ? (
+        <div className="absolute top-3 left-3 right-3 z-[500] flex items-center justify-between pointer-events-none">
+          <button
+            type="button"
+            onClick={() => setIsFullscreen(false)}
+            className="pointer-events-auto bg-red-600 hover:bg-red-700 active:scale-95 text-white px-4 py-2 rounded-full text-xs sm:text-sm font-black shadow-xl flex items-center gap-2 transition"
+          >
+            <span>✕</span>
+            <span>تصغير الخريطة (رجوع)</span>
+          </button>
+          
+          <div className="pointer-events-auto bg-white/95 backdrop-blur px-3.5 py-1.5 rounded-full text-xs font-black text-gray-800 shadow-lg border border-gray-200 flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${activePoints.hasDriver ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`}></span>
+            <span>{activePoints.hasDriver ? '🚗 تتبع السائق مباشر' : '📍 مسار الرحلة'}</span>
+          </div>
+        </div>
+      ) : (
+        /* Top Controls in Normal Embedded View */
+        <>
+          <button
+            type="button"
+            onClick={() => setIsFullscreen(true)}
+            className="absolute top-3 left-14 z-[400] bg-orange-600 hover:bg-orange-700 active:scale-95 text-white px-3.5 py-1.5 rounded-full text-xs font-black shadow-lg flex items-center gap-1.5 transition"
+            title="تكبير الخريطة للشاشة كاملة"
+          >
+            <span className="text-sm">⛶</span>
+            <span>تكبير الخريطة</span>
+          </button>
 
-      {/* Floating Focus Action Buttons */}
+          <div className="absolute top-3 right-3 z-[400] bg-white/95 backdrop-blur px-3 py-1.5 rounded-full text-xs font-black text-gray-800 shadow-sm border border-gray-100 flex items-center gap-1.5">
+            <span className={`w-2.5 h-2.5 rounded-full ${activePoints.hasDriver ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`}></span>
+            {activePoints.hasDriver ? '🚗 موقع السائق' : '📍 المسار'}
+          </div>
+        </>
+      )}
+
+      {/* Floating Focus and Quick Action Buttons */}
       {showControls && (
         <div className="absolute bottom-3 right-3 left-3 sm:left-auto z-[400] flex flex-wrap gap-1.5 bg-white/95 backdrop-blur-md p-1.5 rounded-2xl shadow-xl border border-gray-200/80">
           {activePoints.hasDriver && (
@@ -348,9 +416,23 @@ export default function RideMap({
               className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-800 rounded-xl text-xs font-black shadow-xs transition"
               title="عرض كامل المسار"
             >
-              🗺️ المسار كاملاً
+              🗺️ المسار
             </button>
           )}
+
+          {/* Quick Bottom Toggle for Mobile Users */}
+          <button
+            type="button"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl text-xs font-black shadow-xs transition active:scale-95 ${
+              isFullscreen 
+                ? 'bg-red-50 hover:bg-red-100 text-red-600' 
+                : 'bg-orange-50 hover:bg-orange-100 text-orange-700'
+            }`}
+            title={isFullscreen ? 'تصغير الخريطة' : 'تكبير الخريطة'}
+          >
+            {isFullscreen ? '✕ تصغير' : '⛶ تكبير'}
+          </button>
         </div>
       )}
     </div>

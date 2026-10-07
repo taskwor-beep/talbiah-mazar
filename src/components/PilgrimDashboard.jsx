@@ -662,7 +662,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                     pickupCoords={locationCoords ? [locationCoords.lat, locationCoords.lng] : null}
                     dropoffCoords={dropoffCoords}
                     driverCoords={driverLiveCoords}
-                    height="240px"
+                    height="360px"
                     className="mb-6"
                   />
 
