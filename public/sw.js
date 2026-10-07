@@ -1,4 +1,6 @@
-const CACHE_NAME = 'mazar-v2';
+importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
+
+const CACHE_NAME = 'mazar-v3';
 const STATIC_ASSETS = [
   '/manifest.json',
   '/icon.svg'
@@ -58,32 +60,30 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// 3. Handle Push Notifications while app is closed
+// 3. Handle Push Notifications while app is closed (Fallback for non-OneSignal pushes)
 self.addEventListener('push', (event) => {
-  let data = { title: 'مزار - إشعار جديد', body: 'لديك تحديث جديد حول رحلتك', icon: '/icon.svg' };
+  if (!event.data) return;
   try {
-    if (event.data) {
-      data = event.data.json();
+    const rawData = event.data.json();
+    // OneSignalSDK.sw.js handles its own push notifications natively
+    if (rawData && (rawData.custom || rawData.onesignal || rawData.notificationId)) {
+      return;
     }
+    const options = {
+      body: rawData.body || 'لديك تحديث جديد حول رحلتك',
+      icon: rawData.icon || '/icon.svg',
+      badge: '/icon.svg',
+      vibrate: [200, 100, 200, 100, 200],
+      data: {
+        url: rawData.url || '/'
+      }
+    };
+    event.waitUntil(
+      self.registration.showNotification(rawData.title || 'مزار - إشعار جديد', options)
+    );
   } catch (e) {
-    if (event.data) {
-      data.body = event.data.text();
-    }
+    // Non-JSON push payload
   }
-
-  const options = {
-    body: data.body,
-    icon: data.icon || '/icon.svg',
-    badge: '/icon.svg',
-    vibrate: [200, 100, 200, 100, 200],
-    data: {
-      url: data.url || '/'
-    }
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(data.title, options)
-  );
 });
 
 // 4. Open app when notification is clicked

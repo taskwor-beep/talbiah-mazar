@@ -1,4 +1,5 @@
 // OneSignal Web Push Integration for Mazar App
+import { supabase } from './supabase';
 
 const ONESIGNAL_APP_ID = import.meta.env.VITE_ONESIGNAL_APP_ID || 'acccfba5-e13c-4bd5-a2ad-d7f9e4f15c62';
 
@@ -8,13 +9,6 @@ const ONESIGNAL_APP_ID = import.meta.env.VITE_ONESIGNAL_APP_ID || 'acccfba5-e13c
 export async function initOneSignal() {
   if (typeof window === 'undefined') return;
 
-  // Check if App ID is configured
-  if (!ONESIGNAL_APP_ID) {
-    console.log('OneSignal: VITE_ONESIGNAL_APP_ID is not set yet.');
-    return;
-  }
-
-  // Load SDK dynamically if not already loaded
   if (!window.OneSignalDeferred) {
     window.OneSignalDeferred = [];
   }
@@ -30,9 +24,10 @@ export async function initOneSignal() {
   window.OneSignalDeferred.push(async function (OneSignal) {
     await OneSignal.init({
       appId: ONESIGNAL_APP_ID,
-      safari_web_id: '',
+      serviceWorkerParam: { scope: '/' },
+      serviceWorkerPath: '/sw.js',
       notifyButton: {
-        enable: false, // We use custom UI prompt
+        enable: false,
       },
       allowLocalhostAsSecureOrigin: true,
     });
@@ -55,7 +50,7 @@ export async function requestNotificationPermission() {
 }
 
 /**
- * Tag the user by their role ('driver' or 'pilgrim') so we can target notifications
+ * Tag the user by their role ('driver' or 'pilgrim')
  */
 export function setOneSignalRole(role, userName) {
   if (typeof window === 'undefined' || !window.OneSignalDeferred) return;
@@ -74,40 +69,60 @@ export function setOneSignalRole(role, userName) {
   });
 }
 
-const ONESIGNAL_REST_KEY = import.meta.env.VITE_ONESIGNAL_REST_API_KEY || '';
-
 /**
- * Send push notification to target role ('driver' or 'pilgrim')
+ * Send push notification (fetches key dynamically from admin_settings in Supabase)
  */
-export async function sendPushNotification({ title, message, targetRole = 'driver', targetUrl = '/' }) {
-  if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_KEY) return;
+export async function sendPushNotification({ title, message, targetRole = null, targetUrl = '/' }) {
   try {
+    // 1. Fetch credentials from admin_settings in Supabase
+    const { data: settingData } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'onesignal_notify')
+      .limit(1)
+      .maybeSingle();
+
+    const appId = settingData?.value?.app_id || ONESIGNAL_APP_ID;
+    const restKey = settingData?.value?.rest_api_key;
+
+    if (!appId || !restKey) {
+      console.warn('OneSignal credentials missing in admin_settings');
+      return;
+    }
+
     const payload = {
-      app_id: ONESIGNAL_APP_ID,
-      filters: [
-        { field: 'tag', key: 'role', relation: '=', value: targetRole }
-      ],
+      app_id: appId,
       headings: {
-        ar: title,
-        en: title
+        ar: title || 'مزار - طلب توصيل جديد 🚗',
+        en: title || 'Mazar - New Request 🚗'
       },
       contents: {
-        ar: message,
-        en: message
+        ar: message || 'هناك معتمر يطلب توصيلة الآن!',
+        en: message || 'A pilgrim is requesting a ride now!'
       },
       url: targetUrl
     };
 
-    await fetch('https://onesignal.com/api/v1/notifications', {
+    if (targetRole) {
+      payload.filters = [
+        { field: 'tag', key: 'role', relation: '=', value: targetRole }
+      ];
+    } else {
+      payload.included_segments = ['Total Subscriptions'];
+    }
+
+    const response = await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${ONESIGNAL_REST_KEY}`,
+        'Authorization': `Basic ${restKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     });
+
+    const result = await response.json();
+    return result;
   } catch (err) {
     console.warn('Error sending OneSignal push:', err);
   }
 }
-

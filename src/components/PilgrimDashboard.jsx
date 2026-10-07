@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Navigation, Clock, CreditCard, User, LogOut, CheckCircle2, Navigation2, Home, Search as SearchIcon, Settings, Wallet, Download } from 'lucide-react';
+import { MapPin, Navigation, Clock, CreditCard, User, LogOut, CheckCircle2, Navigation2, Home, Search as SearchIcon, Settings, Wallet, Download, Bell } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
@@ -24,6 +24,20 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     requestNotificationPermission();
     fetchData();
   }, []);
+
+
+  const handleTestBackgroundNotification = async () => {
+    await requestNotificationPermission();
+    toast.success('تم جدولة إشعار تجريبي خلال 3 ثوانٍ! أغلق التطبيق أو اقفل الشاشة الآن 📲', { duration: 4000 });
+    setTimeout(() => {
+      sendPushNotification({
+        title: 'مزار - تجربة إشعار الخلفية 🔔',
+        message: 'التنبيهات تعمل بنجاح في الخلفية حتى بعد إغلاق التطبيق! 🚗✨',
+        targetRole: null,
+        targetUrl: '/'
+      });
+    }, 3000);
+  };
 
   const fetchData = async () => {
     // Fetch approved packages with their nested steps and driver details
@@ -154,48 +168,54 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     setRideStatus('requesting');
     setOfferedRide(null);
     
-    // Get real user ID
-    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).limit(1).maybeSingle();
-    
-    if (userData) {
-      const { data, error } = await supabase.from('orders').insert([{
-        customer_id: userData.id,
-        driver_id: targetDriverId,
-        pickup_address: finalPickup,
-        dropoff_address: finalDropoff,
-        status: targetDriverId ? 'pending_driver_approval' : 'pending',
-        total_amount: price || 0,
-        pickup_latitude: locationCoords?.lat,
-        pickup_longitude: locationCoords?.lng
-      }]).select();
-      
-      if (error) {
-        toast.error('خطأ في إنشاء الطلب: ' + error.message);
-        setRideStatus('idle');
-        return;
-      }
-      
-      if (data && data.length > 0) {
-        setCurrentOrderId(data[0].id);
-        toast.success('تم إنشاء طلبك! نحن بانتظار عروض السائقين.');
-        
-        // Trigger WhatsApp Admin Notification in background
-        supabase.functions.invoke('whatsapp-notify', {
-          body: {
-            customer_name: userName,
-            pickup: finalPickup,
-            dropoff: finalDropoff
-          }
-        }).catch(err => console.error('Failed to trigger whatsapp notify:', err));
+    // Get real user ID or fallback
+    let customerId = null;
+    if (userName) {
+      const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).limit(1).maybeSingle();
+      if (userData) customerId = userData.id;
+    }
+    if (!customerId) {
+      const { data: anyUser } = await supabase.from('users').select('id').limit(1).maybeSingle();
+      customerId = anyUser?.id;
+    }
 
-        // Trigger OneSignal Push Notification to all Drivers in background
-        sendPushNotification({
-          title: 'طلب مشوار جديد 🚗',
-          message: `المعتمر ${userName} يطلب مشواراً: من ${finalPickup} إلى ${finalDropoff}`,
-          targetRole: 'driver',
-          targetUrl: '/'
-        }).catch(err => console.error('Failed to trigger OneSignal push:', err));
-      }
+    const { data, error } = await supabase.from('orders').insert([{
+      customer_id: customerId,
+      driver_id: targetDriverId,
+      pickup_address: finalPickup,
+      dropoff_address: finalDropoff,
+      status: targetDriverId ? 'pending_driver_approval' : 'pending',
+      total_amount: price || 0,
+      pickup_latitude: locationCoords?.lat,
+      pickup_longitude: locationCoords?.lng
+    }]).select();
+    
+    if (error) {
+      toast.error('خطأ في إنشاء الطلب: ' + error.message);
+      setRideStatus('idle');
+      return;
+    }
+    
+    if (data && data.length > 0) {
+      setCurrentOrderId(data[0].id);
+      toast.success('تم إنشاء طلبك! نحن بانتظار عروض السائقين.');
+      
+      // Trigger WhatsApp Admin Notification in background
+      supabase.functions.invoke('whatsapp-notify', {
+        body: {
+          customer_name: userName || 'معتمر',
+          pickup: finalPickup,
+          dropoff: finalDropoff
+        }
+      }).catch(err => console.error('Failed to trigger whatsapp notify:', err));
+
+      // Trigger OneSignal Push Notification in background (all subscribed devices & drivers)
+      sendPushNotification({
+        title: 'طلب باقة / توصيل جديد 🚗',
+        message: `المعتمر ${userName || 'معتمر'} يطلب: ${finalDropoff}`,
+        targetRole: null,
+        targetUrl: '/'
+      }).catch(err => console.error('Failed to trigger OneSignal push:', err));
     }
   };
 
@@ -333,10 +353,20 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
       <main className="flex-1 p-4 md:p-8 h-screen overflow-y-auto">
         <div className="flex justify-between items-center mb-8 bg-white p-4 rounded-3xl shadow-sm border border-gray-100 md:hidden">
            <span className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-700 to-orange-600 cursor-pointer" onClick={onGoHome}>مزار</span>
-           <button onClick={onLogout} className="text-red-500"><LogOut size={20} /></button>
+           <div className="flex items-center gap-2">
+              <button onClick={handleTestBackgroundNotification} className="bg-red-50 text-red-600 p-2 rounded-xl border border-red-100 flex items-center gap-1 text-xs font-bold" title="تجربة إشعار الخلفية">
+                <Bell size={16} /> فحص التنبيه
+              </button>
+              <button onClick={onLogout} className="text-red-500"><LogOut size={20} /></button>
+            </div>
         </div>
 
-        <h1 className="text-2xl font-black text-gray-800 hidden md:block mb-8">لوحة التحكم الخاصة بك</h1>
+        <div className="flex justify-between items-center hidden md:flex mb-8">
+          <h1 className="text-2xl font-black text-gray-800">لوحة التحكم الخاصة بك</h1>
+          <button onClick={handleTestBackgroundNotification} className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-orange-500 text-white px-4 py-2.5 rounded-2xl text-sm font-bold shadow-sm hover:shadow-md hover:scale-105 transition-all">
+            <Bell size={18} /> تجربة إشعار الخلفية (3 ثوانٍ)
+          </button>
+        </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
           
