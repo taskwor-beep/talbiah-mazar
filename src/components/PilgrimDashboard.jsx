@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Navigation, Clock, CreditCard, User, LogOut, CheckCircle2, Navigation2, Home, Search as SearchIcon, Settings } from 'lucide-react';
+import { MapPin, Navigation, Clock, CreditCard, User, LogOut, CheckCircle2, Navigation2, Home, Search as SearchIcon, Settings, Wallet, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
+import RideMap from './RideMap';
 
 export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [rideStatus, setRideStatus] = useState('idle'); // idle, requesting, active
@@ -64,7 +65,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).limit(1).maybeSingle();
     if (userData) {
       const { data: activeOrder } = await supabase.from('orders')
-        .select('*, drivers(users(full_name))')
+        .select('*, drivers(users(full_name, phone_number))')
         .eq('customer_id', userData.id)
         .in('status', ['pending', 'pending_driver_approval', 'driver_offered', 'accepted', 'picking_up', 'in_transit'])
         .order('created_at', { ascending: false })
@@ -101,8 +102,8 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
         { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${currentOrderId}` },
         async (payload) => {
           const updatedOrder = payload.new;
-          // When order status changes, fetch full details to get driver name
-          const { data } = await supabase.from('orders').select('*, drivers(users(full_name))').eq('id', currentOrderId).limit(1).maybeSingle();
+          // When order status changes, fetch full details to get driver name and phone
+          const { data } = await supabase.from('orders').select('*, drivers(users(full_name, phone_number))').eq('id', currentOrderId).limit(1).maybeSingle();
           if (data) {
             if (data.status === 'driver_offered') {
               setRideStatus('driver_offered');
@@ -209,6 +210,23 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
       }
     } catch (err) {
       toast.error('حدث خطأ أثناء إعداد الدفع: ' + err.message, { id: 'payment' });
+    }
+  };
+
+  const acceptOfferCash = async () => {
+    toast.loading('جاري تأكيد حجز المشوار نقداً...', { id: 'cash-payment' });
+    try {
+      const { error } = await supabase.from('orders').update({
+        status: 'accepted',
+        payment_method: 'cash',
+        payment_status: 'pending'
+      }).eq('id', currentOrderId);
+
+      if (error) throw error;
+      setRideStatus('active');
+      toast.success('تم تأكيد المشوار بنجاح! سيتم الدفع نقداً عند الوصول للسائق.', { id: 'cash-payment' });
+    } catch (err) {
+      toast.error('حدث خطأ: ' + err.message, { id: 'cash-payment' });
     }
   };
 
@@ -372,12 +390,15 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                       <div className="text-3xl font-black text-red-600">{offeredRide.total_amount} د.ج</div>
                     </div>
                   </div>
-                  <div className="flex gap-4">
-                    <button onClick={rejectOffer} className="flex-1 bg-white border-2 border-red-200 text-red-500 font-bold py-4 rounded-xl hover:bg-red-50 transition">
-                      رفض العرض
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button onClick={acceptOffer} className="flex-1 bg-gradient-to-r from-red-600 to-orange-500 text-white font-black py-4 px-3 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition flex items-center justify-center gap-2">
+                      <CreditCard size={18} /> دفع بالبطاقة (Chargily)
                     </button>
-                    <button onClick={acceptOffer} className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black py-4 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition">
-                      قبول والدفع (Chargily)
+                    <button onClick={acceptOfferCash} className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-black py-4 px-3 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition flex items-center justify-center gap-2">
+                      <Wallet size={18} /> دفع نقداً عند الوصول
+                    </button>
+                    <button onClick={rejectOffer} className="bg-white border-2 border-red-200 text-red-500 font-bold py-4 px-6 rounded-2xl hover:bg-red-50 transition">
+                      رفض العرض
                     </button>
                   </div>
                 </div>
@@ -386,20 +407,48 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
               {rideStatus === 'active' && (
                 <div className="bg-orange-50 p-8 rounded-3xl border border-orange-200 ring-4 ring-orange-50 relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
-                  <h3 className="font-black text-xl mb-6 text-gray-800 flex items-center gap-2">
+                  <h3 className="font-black text-xl mb-4 text-gray-800 flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
                     السائق في طريقه إليك
                   </h3>
+
+                  {/* Interactive Live Route Map */}
+                  <RideMap 
+                    pickupAddress={pickup} 
+                    dropoffAddress={dropoff} 
+                    height="240px"
+                    className="mb-6"
+                  />
+
                   <div className="flex flex-col sm:flex-row gap-6 items-center bg-white p-6 rounded-2xl shadow-sm mb-6">
                     <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center shadow-inner">
                       <User className="text-gray-400" size={40} />
                     </div>
                     <div className="flex-1 text-center sm:text-right">
-                      <h3 className="font-black text-2xl text-gray-800 mb-1">السائق {offeredRide?.drivers?.users?.full_name || '...'}</h3>
-                      <p className="text-gray-500 font-bold mb-2">في انتظار إتمام الدفع...</p>
+                      <h3 className="font-black text-2xl text-gray-800 mb-1">السائق {offeredRide?.drivers?.users?.full_name || 'سائق مزار'}</h3>
+                      <div className="text-sm font-bold text-gray-500 flex items-center justify-center sm:justify-start gap-2 mt-1">
+                        <Wallet size={16} className="text-orange-500" />
+                        <span>{offeredRide?.payment_method === 'cash' ? 'طريقة الدفع: نقداً عند الوصول (يُرجى تسليم المبلغ للسائق)' : 'طريقة الدفع: إلكتروني (تم الدفع بالبطاقة الذهبية / CIB)'}</span>
+                      </div>
+                    </div>
+                    <div className="text-2xl font-black text-orange-600">
+                      {offeredRide?.total_amount} د.ج
                     </div>
                   </div>
-                  <button onClick={() => setRideStatus('idle')} className="w-full bg-red-100 text-red-600 font-black py-4 rounded-2xl hover:bg-red-200 hover:shadow-sm transition">
+
+                  {/* WhatsApp direct contact with Driver */}
+                  {offeredRide?.drivers?.users?.phone_number && (
+                    <a 
+                      href={`https://wa.me/${offeredRide.drivers.users.phone_number.replace(/\D/g, '')}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="w-full bg-[#25D366] text-white font-bold py-4 rounded-2xl hover:bg-[#1da851] transition shadow-md flex items-center justify-center gap-2 mb-4"
+                    >
+                      <span>تواصل عبر واتساب مع السائق</span>
+                    </a>
+                  )}
+
+                  <button onClick={cancelRequest} className="w-full bg-red-100 text-red-600 font-black py-4 rounded-2xl hover:bg-red-200 transition">
                     إلغاء الطلب
                   </button>
                 </div>

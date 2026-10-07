@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MapPin, Navigation, Car, ShieldCheck, Wallet, Search, Star, X, User, Facebook, Twitter, Instagram } from 'lucide-react';
+import { MapPin, Navigation, Car, ShieldCheck, Wallet, Search, Star, X, User, Facebook, Twitter, Instagram, Smartphone } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
 import Footer from './components/Footer';
@@ -19,6 +19,29 @@ export default function App() {
   const [currentView, setCurrentView] = useState(localStorage.getItem('currentView') || 'landing');
   const [userName, setUserName] = useState(localStorage.getItem('userName') || '');
   const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || 'pilgrim');
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  React.useEffect(() => {
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      if (choice.outcome === 'accepted') {
+        toast.success('شكراً لتثبيت تطبيق مزار!');
+      }
+      setDeferredPrompt(null);
+    } else {
+      toast('لتثبيت التطبيق على هاتفك: اختر "إضافة إلى الشاشة الرئيسية" من خيارات المتصفح 📲', { icon: '📲' });
+    }
+  };
 
   React.useEffect(() => {
     localStorage.setItem('isLoggedIn', isLoggedIn);
@@ -151,6 +174,13 @@ export default function App() {
           </span>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
+          <button 
+            onClick={handleInstallClick} 
+            className="bg-white/80 hover:bg-white text-orange-600 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full font-bold text-xs sm:text-sm flex items-center gap-1.5 transition shadow-sm border border-orange-200"
+            title="تثبيت التطبيق على الجوال"
+          >
+            <Smartphone size={16} /> تثبيت التطبيق
+          </button>
           {isLoggedIn ? (
             <div className="flex items-center gap-2 sm:gap-3 bg-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full shadow-sm border border-orange-100">
               <button 

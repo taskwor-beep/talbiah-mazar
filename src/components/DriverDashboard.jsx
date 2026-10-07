@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet, Plus, Trash2, AlertCircle, Volume2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
+import RideMap from './RideMap';
+import { playNewOrderAlert, playSuccessChime } from '../lib/sound';
 
 export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [isOnline, setIsOnline] = useState(true);
@@ -29,6 +31,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     steps: [{ title: '', startTime: '', endTime: '', priceDZD: '' }] 
   });
 
+  const [activeRide, setActiveRide] = useState(null);
   const activeRideRef = React.useRef(null);
 
   useEffect(() => {
@@ -76,7 +79,10 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
           status: activeOrder.status,
           lat: activeOrder.pickup_latitude,
           lng: activeOrder.pickup_longitude,
-          customerName: activeOrder.users?.full_name
+          customerName: activeOrder.users?.full_name,
+          customerPhone: activeOrder.users?.phone_number,
+          paymentMethod: activeOrder.payment_method || 'cash',
+          paymentStatus: activeOrder.payment_status || 'pending'
         };
         setActiveRide(newActiveRide);
         activeRideRef.current = newActiveRide;
@@ -142,6 +148,13 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
         (payload) => {
+          if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'pending')) {
+            playNewOrderAlert();
+            toast('🔔 طلب توصيل جديد متاح!', { icon: '🚗' });
+          } else if (payload.eventType === 'UPDATE' && payload.new?.status === 'accepted' && payload.new?.driver_id === driverId) {
+            playSuccessChime();
+            toast.success('🎉 تم قبول عرضك من المعتمر!');
+          }
           fetchDriverData();
         }
       )
@@ -241,8 +254,6 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     setPackages(packages.filter(p => p.id !== id));
     toast.success('تم حذف الباقة بنجاح');
   };
-
-  const [activeRide, setActiveRide] = useState(null);
 
   const acceptRide = async (ride) => {
     if (ride.price !== 'قابل للتفاوض' && ride.price > 0) {
@@ -370,11 +381,20 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
            <button onClick={onLogout} className="text-red-500"><LogOut size={20} /></button>
         </div>
 
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-8 gap-3 flex-wrap">
           <h1 className="text-2xl font-black text-gray-800 hidden md:block">لوحة التحكم</h1>
-          <div className="flex items-center gap-2 bg-white p-1 rounded-full shadow-sm border border-gray-100 mr-auto">
-            <span className={`text-sm font-bold px-4 py-2 rounded-full transition cursor-pointer ${!isOnline ? 'bg-gray-100 text-gray-800 shadow-inner' : 'text-gray-400 hover:text-gray-600'}`} onClick={() => setIsOnline(false)}>غير متصل</span>
-            <span className={`text-sm font-bold px-4 py-2 rounded-full transition cursor-pointer ${isOnline ? 'bg-green-500 text-white shadow-md' : 'text-gray-400 hover:text-gray-600'}`} onClick={() => setIsOnline(true)}>متصل للطلبات</span>
+          <div className="flex items-center gap-3 mr-auto flex-wrap">
+            <button 
+              onClick={() => { playNewOrderAlert(); toast.success('صوت التنبيه يعمل بنجاح! 🔔'); }}
+              className="bg-orange-50 hover:bg-orange-100 text-orange-600 px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 shadow-sm border border-orange-200"
+              title="فحص جرس التنبيهات"
+            >
+              <Volume2 size={16} /> فحص جرس التنبيه
+            </button>
+            <div className="flex items-center gap-2 bg-white p-1 rounded-full shadow-sm border border-gray-100">
+              <span className={`text-sm font-bold px-4 py-2 rounded-full transition cursor-pointer ${!isOnline ? 'bg-gray-100 text-gray-800 shadow-inner' : 'text-gray-400 hover:text-gray-600'}`} onClick={() => setIsOnline(false)}>غير متصل</span>
+              <span className={`text-sm font-bold px-4 py-2 rounded-full transition cursor-pointer ${isOnline ? 'bg-green-500 text-white shadow-md' : 'text-gray-400 hover:text-gray-600'}`} onClick={() => setIsOnline(true)}>متصل للطلبات</span>
+            </div>
           </div>
         </div>
 
@@ -558,7 +578,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         ) : activeRide ? (
           <div className="bg-white rounded-3xl p-8 shadow-md border-2 border-orange-400 ring-8 ring-orange-50 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
-            <div className="flex justify-between items-center mb-8">
+            <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-gray-800 flex items-center gap-3">
                 <div className="w-4 h-4 bg-green-500 rounded-full animate-ping"></div>
                 {activeRide.status === 'driver_offered' ? 'في انتظار موافقة المعتمر...' : 'رحلة جارية نحو العميل'}
@@ -567,8 +587,28 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
                 {activeRide.price} د.ج
               </span>
             </div>
+
+            {/* Interactive Live Route Map */}
+            <RideMap 
+              pickupAddress={activeRide.pickup} 
+              dropoffAddress={activeRide.dropoff} 
+              driverCoords={activeRide.lat && activeRide.lng ? [activeRide.lat, activeRide.lng] : null}
+              height="240px"
+              className="mb-6"
+            />
+
+            {/* Payment Method Details */}
+            <div className={`p-4 rounded-2xl flex items-center justify-between mb-6 ${activeRide.paymentMethod === 'card' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Wallet size={18} />
+                <span>
+                  {activeRide.paymentMethod === 'card' ? 'طريقة الدفع: إلكتروني (تم الدفع مسبقاً عبر Chargily)' : 'طريقة الدفع: نقداً عند الوصول (يُرجى تحصيل المبلغ من العميل)'}
+                </span>
+              </div>
+              <span className="font-black text-base">{activeRide.price} د.ج</span>
+            </div>
             
-            <div className="space-y-6 mb-10 bg-gray-50 p-6 rounded-2xl">
+            <div className="space-y-6 mb-8 bg-gray-50 p-6 rounded-2xl">
               <div className="flex items-center gap-4">
                 <div className="bg-white p-3 rounded-xl shadow-sm text-gray-500"><MapPin size={24} /></div>
                 <div>
@@ -590,6 +630,18 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
                 </div>
               </div>
             </div>
+
+            {/* Direct WhatsApp Contact Button */}
+            {activeRide.customerPhone && (
+              <a 
+                href={`https://wa.me/${activeRide.customerPhone.replace(/\D/g, '')}`} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="w-full bg-[#25D366] text-white font-bold py-3.5 rounded-2xl hover:bg-[#1da851] transition shadow-md flex items-center justify-center gap-2 mb-4"
+              >
+                <span>تواصل عبر واتساب مع العميل ({activeRide.customerName || 'المعتمر'})</span>
+              </a>
+            )}
 
             {activeRide.status === 'accepted' ? (
               <button onClick={finishRide} className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black text-xl py-5 rounded-2xl shadow-[0_10px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_15px_30px_rgba(34,197,94,0.4)] hover:-translate-y-1 transition">
