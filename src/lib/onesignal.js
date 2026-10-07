@@ -1,6 +1,6 @@
 // OneSignal Web Push Integration for Mazar App
 
-const ONESIGNAL_APP_ID = import.meta.env.VITE_ONESIGNAL_APP_ID || '';
+const ONESIGNAL_APP_ID = import.meta.env.VITE_ONESIGNAL_APP_ID || 'acccfba5-e13c-4bd5-a2ad-d7f9e4f15c62';
 
 /**
  * Initialize OneSignal Web SDK
