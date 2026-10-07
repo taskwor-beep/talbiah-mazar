@@ -15,6 +15,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [currentOrderId, setCurrentOrderId] = useState(null);
   const [offeredRide, setOfferedRide] = useState(null);
   const [currentOrderType, setCurrentOrderType] = useState('search');
+  const [driverLiveCoords, setDriverLiveCoords] = useState(null);
 
   const [availablePackages, setAvailablePackages] = useState([]);
   const [availableOffers, setAvailableOffers] = useState([]);
@@ -23,6 +24,14 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     setOneSignalRole('pilgrim', userName);
     requestNotificationPermission();
     fetchData();
+    if (navigator.geolocation && !locationCoords) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setLocationCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        () => {}
+      );
+    }
   }, []);
 
 
@@ -306,6 +315,50 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     }
   };
 
+
+  // Track driver live GPS when ride is active
+  useEffect(() => {
+    if (!offeredRide?.driver_id || rideStatus !== 'active') {
+      setDriverLiveCoords(null);
+      return;
+    }
+
+    const fetchDriverCoords = async () => {
+      const { data } = await supabase
+        .from('drivers')
+        .select('current_latitude, current_longitude')
+        .eq('id', offeredRide.driver_id)
+        .maybeSingle();
+
+      if (data?.current_latitude && data?.current_longitude) {
+        setDriverLiveCoords([data.current_latitude, data.current_longitude]);
+      }
+    };
+    fetchDriverCoords();
+
+    const channel = supabase
+      .channel(`driver-gps-${offeredRide.driver_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'drivers',
+          filter: `id=eq.${offeredRide.driver_id}`
+        },
+        (payload) => {
+          if (payload.new?.current_latitude && payload.new?.current_longitude) {
+            setDriverLiveCoords([payload.new.current_latitude, payload.new.current_longitude]);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [offeredRide?.driver_id, rideStatus]);
+
   return (
     <div className="flex min-h-screen bg-gray-50 font-sans text-gray-900" dir="rtl">
       
@@ -457,6 +510,8 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                   <RideMap 
                     pickupAddress={pickup} 
                     dropoffAddress={dropoff} 
+                    pickupCoords={locationCoords ? [locationCoords.lat, locationCoords.lng] : null}
+                    driverCoords={driverLiveCoords}
                     height="240px"
                     className="mb-6"
                   />

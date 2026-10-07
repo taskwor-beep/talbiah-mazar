@@ -33,7 +33,37 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   });
 
   const [activeRide, setActiveRide] = useState(null);
+  const [myDriverCoords, setMyDriverCoords] = useState(null);
   const activeRideRef = React.useRef(null);
+
+
+  // Track driver live GPS
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const coords = [pos.coords.latitude, pos.coords.longitude];
+        setMyDriverCoords(coords);
+
+        if (driverId) {
+          supabase.from('drivers').update({
+            current_latitude: coords[0],
+            current_longitude: coords[1],
+            is_online: true
+          }).eq('id', driverId).then(() => {});
+        }
+      },
+      (err) => {
+        console.warn('Driver GPS watch error:', err);
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [driverId]);
 
   useEffect(() => {
     setOneSignalRole('driver', userName);
@@ -595,7 +625,8 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
             <RideMap 
               pickupAddress={activeRide.pickup} 
               dropoffAddress={activeRide.dropoff} 
-              driverCoords={activeRide.lat && activeRide.lng ? [activeRide.lat, activeRide.lng] : null}
+              pickupCoords={activeRide.lat && activeRide.lng ? [activeRide.lat, activeRide.lng] : null}
+              driverCoords={myDriverCoords}
               height="240px"
               className="mb-6"
             />
