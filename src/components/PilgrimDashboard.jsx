@@ -6,6 +6,7 @@ import Footer from './Footer';
 import RideMap from './RideMap';
 import { setOneSignalRole, requestNotificationPermission, sendPushNotification } from '../lib/onesignal';
 import { DESTINATIONS_DB } from '../lib/destinations';
+import { getReliablePosition } from '../lib/geo';
 
 export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [rideStatus, setRideStatus] = useState('idle'); // idle, requesting, active
@@ -30,13 +31,12 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     setOneSignalRole('pilgrim', userName);
     requestNotificationPermission();
     fetchData();
-    if (navigator.geolocation && !locationCoords) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLocationCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        },
-        () => {}
-      );
+    if (!locationCoords) {
+      getReliablePosition().then((pos) => {
+        if (pos) {
+          setLocationCoords({ lat: pos.lat, lng: pos.lng });
+        }
+      });
     }
   }, []);
 
@@ -189,21 +189,13 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
 
     // 1. تحديد موقع المعتمر بدقة عند إنشاء الطلب
     let orderCoords = locationCoords;
-    if (navigator.geolocation) {
-      try {
-        const freshPos = await new Promise((resolve) => {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-            () => resolve(null),
-            { enableHighAccuracy: true, timeout: 6000 }
-          );
-        });
-        if (freshPos) {
-          orderCoords = freshPos;
-          setLocationCoords(freshPos);
-        }
-      } catch (e) {}
-    }
+    try {
+      const freshPos = await getReliablePosition();
+      if (freshPos) {
+        orderCoords = { lat: freshPos.lat, lng: freshPos.lng };
+        setLocationCoords(orderCoords);
+      }
+    } catch (e) {}
 
     // استخراج الإحداثيات إن كانت مدونة في العنوان
     if (!orderCoords && finalPickup) {
@@ -335,23 +327,19 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
     toast.success('تم إلغاء الطلب بنجاح.');
   };
 
-  const handleGetLocation = () => {
-    if (navigator.geolocation) {
-      toast.loading('جاري تحديد موقعك...', { id: 'loc' });
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const lat = position.coords.latitude;
-          const lng = position.coords.longitude;
-          setLocationCoords({ lat, lng });
-          setPickup(`موقعي الحالي (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
-          toast.success('تم تحديد موقعك بدقة!', { id: 'loc' });
-        },
-        (error) => {
-          toast.error('لم نتمكن من تحديد موقعك، يرجى تفعيل الـ GPS', { id: 'loc' });
-        }
-      );
-    } else {
-      toast.error('متصفحك لا يدعم تحديد الموقع');
+  const handleGetLocation = async () => {
+    toast.loading('جاري تحديد موقعك...', { id: 'loc' });
+    try {
+      const pos = await getReliablePosition();
+      if (pos) {
+        setLocationCoords({ lat: pos.lat, lng: pos.lng });
+        setPickup(`موقعي الحالي (${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)})`);
+        toast.success('تم تحديد موقعك بنجاح!', { id: 'loc' });
+      } else {
+        toast.error('لم نتمكن من تحديد موقعك، يرجى تفعيل الـ GPS', { id: 'loc' });
+      }
+    } catch (e) {
+      toast.error('حدث خطأ أثناء تحديد الموقع', { id: 'loc' });
     }
   };
 

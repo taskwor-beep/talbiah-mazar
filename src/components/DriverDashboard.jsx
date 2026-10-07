@@ -6,6 +6,7 @@ import Footer from './Footer';
 import RideMap from './RideMap';
 import { playNewOrderAlert, playSuccessChime } from '../lib/sound';
 import { setOneSignalRole, requestNotificationPermission } from '../lib/onesignal';
+import { getReliablePosition } from '../lib/geo';
 
 export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [isOnline, setIsOnline] = useState(true);
@@ -69,25 +70,32 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     setOneSignalRole('driver', userName);
     requestNotificationPermission();
     fetchDriverData();
+    handleRefreshDriverGps();
   }, [userName]);
 
   const fetchDriverData = async () => {
     // For demo: get driver by user name, or just first driver
     const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).limit(1).maybeSingle();
     let currentDriverId = null;
+    let currentDriverRating = 5.0;
     
     if (userData) {
-      const { data: driverData } = await supabase.from('drivers').select('id, status').eq('user_id', userData.id).limit(1).maybeSingle();
-      if (driverData) {
-        currentDriverId = driverData.id;
-        setDriverStatus(driverData.status);
+      const { data: driverInfo } = await supabase.from('drivers').select('id, status, rating').eq('user_id', userData.id).limit(1).maybeSingle();
+      if (driverInfo) {
+        currentDriverId = driverInfo.id;
+        setDriverStatus(driverInfo.status);
+        if (driverInfo.rating) currentDriverRating = driverInfo.rating;
       }
     }
     
     // Fallback if not found
     if (!currentDriverId) {
-      const { data: firstDriver } = await supabase.from('drivers').select('id').limit(1).maybeSingle();
-      if (firstDriver) currentDriverId = firstDriver.id;
+      const { data: firstDriver } = await supabase.from('drivers').select('id, rating, status').limit(1).maybeSingle();
+      if (firstDriver) {
+        currentDriverId = firstDriver.id;
+        if (firstDriver.status) setDriverStatus(firstDriver.status);
+        if (firstDriver.rating) currentDriverRating = firstDriver.rating;
+      }
     }
 
     if (currentDriverId) {
@@ -162,7 +170,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         setStats({
           earnings: totalEarnings,
           completedRides: completedOrders.length,
-          rating: driverData?.rating || 5.0
+          rating: currentDriverRating
         });
       }
     }
@@ -293,21 +301,13 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
 
     // تحديد موقع السائق بدقة فور قبول الطلب
     let driverGps = myDriverCoords;
-    if (navigator.geolocation) {
-      try {
-        const freshCoords = await new Promise((resolve) => {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => resolve([pos.coords.latitude, pos.coords.longitude]),
-            () => resolve(null),
-            { enableHighAccuracy: true, timeout: 6000 }
-          );
-        });
-        if (freshCoords) {
-          driverGps = freshCoords;
-          setMyDriverCoords(freshCoords);
-        }
-      } catch (e) {}
-    }
+    try {
+      const fresh = await getReliablePosition();
+      if (fresh) {
+        driverGps = [fresh.lat, fresh.lng];
+        setMyDriverCoords(driverGps);
+      }
+    } catch (e) {}
 
     // حفظ موقع السائق في قاعدة البيانات فور القبول
     if (driverId && driverGps) {
@@ -346,21 +346,13 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
 
       // تحديد موقع السائق بدقة فور إرسال العرض وقبول الطلب
       let driverGps = myDriverCoords;
-      if (navigator.geolocation) {
-        try {
-          const freshCoords = await new Promise((resolve) => {
-            navigator.geolocation.getCurrentPosition(
-              (pos) => resolve([pos.coords.latitude, pos.coords.longitude]),
-              () => resolve(null),
-              { enableHighAccuracy: true, timeout: 6000 }
-            );
-          });
-          if (freshCoords) {
-            driverGps = freshCoords;
-            setMyDriverCoords(freshCoords);
-          }
-        } catch (err) {}
-      }
+      try {
+        const fresh = await getReliablePosition();
+        if (fresh) {
+          driverGps = [fresh.lat, fresh.lng];
+          setMyDriverCoords(driverGps);
+        }
+      } catch (err) {}
 
       if (driverId && driverGps) {
         await supabase.from('drivers').update({
@@ -390,30 +382,27 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   };
 
 
-  const handleRefreshDriverGps = () => {
-    if (!navigator.geolocation) {
-      toast.error('متصفحك لا يدعم تحديد الموقع');
-      return;
-    }
-    toast.loading('جاري تحديد موقعك بدقة GPS...', { id: 'driver-gps' });
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const coords = [pos.coords.latitude, pos.coords.longitude];
+  const handleRefreshDriverGps = async () => {
+    toast.loading('جاري تحديد موقعك...', { id: 'driver-gps' });
+    try {
+      const pos = await getReliablePosition();
+      if (pos) {
+        const coords = [pos.lat, pos.lng];
         setMyDriverCoords(coords);
         if (driverId) {
-          supabase.from('drivers').update({
+          await supabase.from('drivers').update({
             current_latitude: coords[0],
             current_longitude: coords[1],
             is_online: true
-          }).eq('id', driverId).then(() => {});
+          }).eq('id', driverId);
         }
-        toast.success('تم تحديد موقعك بدقة وظهوره على الخريطة! 🚗', { id: 'driver-gps' });
-      },
-      (err) => {
-        toast.error('تعذر تحديد الموقع، يرجى تفعيل الـ GPS والسماح في المتصفح', { id: 'driver-gps' });
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+        toast.success('تم تحديد موقعك بنجاح وظهوره على الخريطة! 🚗', { id: 'driver-gps' });
+      } else {
+        toast.error('تعذر تحديد الموقع، يرجى التأكد من تشغيل الموقع في هاتفك', { id: 'driver-gps' });
+      }
+    } catch (e) {
+      toast.error('حدث خطأ في تحديد الموقع', { id: 'driver-gps' });
+    }
   };
 
   const rejectRideRequest = async (id) => {
