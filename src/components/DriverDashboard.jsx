@@ -389,6 +389,33 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     }
   };
 
+
+  const handleRefreshDriverGps = () => {
+    if (!navigator.geolocation) {
+      toast.error('متصفحك لا يدعم تحديد الموقع');
+      return;
+    }
+    toast.loading('جاري تحديد موقعك بدقة GPS...', { id: 'driver-gps' });
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = [pos.coords.latitude, pos.coords.longitude];
+        setMyDriverCoords(coords);
+        if (driverId) {
+          supabase.from('drivers').update({
+            current_latitude: coords[0],
+            current_longitude: coords[1],
+            is_online: true
+          }).eq('id', driverId).then(() => {});
+        }
+        toast.success('تم تحديد موقعك بدقة وظهوره على الخريطة! 🚗', { id: 'driver-gps' });
+      },
+      (err) => {
+        toast.error('تعذر تحديد الموقع، يرجى تفعيل الـ GPS والسماح في المتصفح', { id: 'driver-gps' });
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
   const rejectRideRequest = async (id) => {
     await supabase.from('orders').update({ status: 'cancelled' }).eq('id', id);
     fetchDriverData();
@@ -659,6 +686,42 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         
         {activeTab === 'home' && (
           <>
+        {/* Driver Live GPS Map Card */}
+        {isOnline && !activeRide && (
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4 mb-6">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
+                <h2 className="font-black text-gray-800 text-lg">خريطتك المباشرة كسائق 🚗</h2>
+              </div>
+              <button
+                type="button"
+                onClick={handleRefreshDriverGps}
+                className="flex items-center gap-1.5 bg-orange-50 hover:bg-orange-100 active:scale-95 text-orange-600 px-3.5 py-2 rounded-xl text-xs font-black transition shadow-xs border border-orange-100"
+              >
+                <Navigation size={14} /> {myDriverCoords ? 'تحديث موقعي (GPS)' : 'تحديد موقعي الآن 🎯'}
+              </button>
+            </div>
+
+            <RideMap 
+              driverCoords={myDriverCoords}
+              height="240px"
+            />
+
+            {myDriverCoords ? (
+              <p className="text-xs text-gray-500 font-bold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                موقعك الحالي محدد وجاهز: ({myDriverCoords[0].toFixed(4)}, {myDriverCoords[1].toFixed(4)})
+              </p>
+            ) : (
+              <div className="flex items-center justify-between bg-orange-50 p-3 rounded-xl border border-orange-100 text-xs text-orange-700 font-bold">
+                <span>📍 اضغط على "تحديد موقعي الآن" لتظهر سيارتك على الخريطة ويتمكن المعتمرون من رؤيتك.</span>
+                <button onClick={handleRefreshDriverGps} className="underline font-black mr-2">تحديد الآن</button>
+              </div>
+            )}
+          </div>
+        )}
+
         {!isOnline ? (
           <div className="bg-white rounded-3xl p-12 text-center shadow-sm border border-gray-100">
             <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-300">

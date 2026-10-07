@@ -51,12 +51,21 @@ export default function RideMap({
   pickupCoords = null,
   dropoffCoords = null,
   height = '280px',
-  className = ''
+  className = '',
+  showControls = true
 }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const [geocodedPickup, setGeocodedPickup] = useState(null);
   const [geocodedDropoff, setGeocodedDropoff] = useState(null);
+
+  // Stored coordinate refs for instant camera flying/focus
+  const pCoordsRef = useRef(null);
+  const dCoordsRef = useRef(null);
+  const dvrCoordsRef = useRef(null);
+  const boundsPointsRef = useRef([]);
+
+  const [activePoints, setActivePoints] = useState({ hasDriver: false, hasPickup: false, hasDropoff: false, totalPoints: 0 });
 
   // Dynamic geocoding for custom addresses if coordinates not provided
   useEffect(() => {
@@ -104,7 +113,7 @@ export default function RideMap({
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    // Resolve final coordinates (priority: passed coordinates -> extracted/geocoded -> null)
+    // Resolve final coordinates
     const pCoords = pickupCoords || geocodedPickup || resolveKnownOrExtractedCoords(pickupAddress);
     const dCoords = dropoffCoords || geocodedDropoff || resolveKnownOrExtractedCoords(dropoffAddress);
 
@@ -113,8 +122,12 @@ export default function RideMap({
       ? driverCoords
       : null;
 
+    pCoordsRef.current = pCoords;
+    dCoordsRef.current = dCoords;
+    dvrCoordsRef.current = validDriverCoords;
+
     // Default center if no coordinates are known yet
-    const initialCenter = pCoords || dCoords || validDriverCoords || [21.4225, 39.8262];
+    const initialCenter = validDriverCoords || pCoords || dCoords || [21.4225, 39.8262];
 
     // Initialize map if not yet created
     if (!mapInstanceRef.current) {
@@ -127,7 +140,7 @@ export default function RideMap({
         maxZoom: 19
       }).addTo(map);
 
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
+      L.control.zoom({ position: 'topleft' }).addTo(map);
       mapInstanceRef.current = map;
     }
 
@@ -157,7 +170,7 @@ export default function RideMap({
 
       L.marker(pCoords, { icon: pickupIcon })
         .addTo(map)
-        .bindPopup(`<b>نقطة الانطلاق (العميل):</b><br/>${pickupAddress || 'الموقع الحالي'}`);
+        .bindPopup(`<b>نقطة الانطلاق (المعتمر):</b><br/>${pickupAddress || 'الموقع الحالي'}`);
       boundsPoints.push(pCoords);
     }
 
@@ -185,17 +198,17 @@ export default function RideMap({
       const driverIcon = L.divIcon({
         className: 'custom-map-marker',
         html: `
-          <div style="background-color: #ea580c; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(234, 88, 12, 0.6); border: 3px solid #ffffff; animation: pulse 2s infinite;">
-            <span style="font-size: 20px;">🚗</span>
+          <div style="background-color: #ea580c; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(234, 88, 12, 0.6); border: 3px solid #ffffff; animation: pulse 2s infinite;">
+            <span style="font-size: 22px;">🚗</span>
           </div>
         `,
-        iconSize: [40, 40],
-        iconAnchor: [20, 20]
+        iconSize: [42, 42],
+        iconAnchor: [21, 21]
       });
 
       L.marker(validDriverCoords, { icon: driverIcon })
         .addTo(map)
-        .bindPopup('<b>موقع السائق المباشر (GPS)</b>');
+        .bindPopup('<b>موقع السائق المباشر (GPS) 🚗</b>');
       boundsPoints.push(validDriverCoords);
     }
 
@@ -220,11 +233,19 @@ export default function RideMap({
       }).addTo(map);
     }
 
+    boundsPointsRef.current = boundsPoints;
+    setActivePoints({
+      hasDriver: !!validDriverCoords,
+      hasPickup: !!pCoords,
+      hasDropoff: !!dCoords,
+      totalPoints: boundsPoints.length
+    });
+
     // Adjust view to contain all real markers
     if (boundsPoints.length > 1) {
       map.fitBounds(L.latLngBounds(boundsPoints), { padding: [50, 50], maxZoom: 16 });
     } else if (boundsPoints.length === 1) {
-      map.setView(boundsPoints[0], 14);
+      map.setView(boundsPoints[0], 15);
     }
 
     setTimeout(() => {
@@ -242,18 +263,96 @@ export default function RideMap({
     };
   }, []);
 
-  const hasDriver = driverCoords && Array.isArray(driverCoords) && driverCoords.length === 2 && !isNaN(driverCoords[0]) && !isNaN(driverCoords[1]);
+  // Control handlers
+  const handleFocusDriver = () => {
+    if (mapInstanceRef.current && dvrCoordsRef.current) {
+      mapInstanceRef.current.flyTo(dvrCoordsRef.current, 16, { duration: 1 });
+    }
+  };
+
+  const handleFocusPickup = () => {
+    if (mapInstanceRef.current && pCoordsRef.current) {
+      mapInstanceRef.current.flyTo(pCoordsRef.current, 16, { duration: 1 });
+    }
+  };
+
+  const handleFocusDropoff = () => {
+    if (mapInstanceRef.current && dCoordsRef.current) {
+      mapInstanceRef.current.flyTo(dCoordsRef.current, 16, { duration: 1 });
+    }
+  };
+
+  const handleFitAll = () => {
+    if (mapInstanceRef.current && boundsPointsRef.current.length > 0) {
+      if (boundsPointsRef.current.length === 1) {
+        mapInstanceRef.current.flyTo(boundsPointsRef.current[0], 15);
+      } else {
+        mapInstanceRef.current.fitBounds(L.latLngBounds(boundsPointsRef.current), { padding: [50, 50] });
+      }
+    }
+  };
 
   return (
     <div 
-      className={`relative w-full rounded-2xl overflow-hidden border border-orange-200 shadow-inner z-0 ${className}`} 
+      className={`relative w-full rounded-3xl overflow-hidden border border-orange-200 shadow-md z-0 ${className}`} 
       style={{ height }}
     >
       <div ref={mapContainerRef} className="w-full h-full" />
-      <div className="absolute top-2 right-2 z-[400] bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-gray-700 shadow-sm border border-orange-100 flex items-center gap-1.5">
-        <span className={`w-2 h-2 rounded-full ${hasDriver ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`}></span>
-        {hasDriver ? '🚗 موقع السائق المباشر' : '📍 مسار الرحلة الحقيقي'}
+      
+      {/* Top Status Badge */}
+      <div className="absolute top-3 right-3 z-[400] bg-white/95 backdrop-blur px-3 py-1.5 rounded-full text-xs font-black text-gray-800 shadow-sm border border-gray-100 flex items-center gap-1.5">
+        <span className={`w-2.5 h-2.5 rounded-full ${activePoints.hasDriver ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`}></span>
+        {activePoints.hasDriver ? '🚗 موقع السائق مباشر' : '📍 مسار الرحلة'}
       </div>
+
+      {/* Floating Focus Action Buttons */}
+      {showControls && (
+        <div className="absolute bottom-3 right-3 left-3 sm:left-auto z-[400] flex flex-wrap gap-1.5 bg-white/95 backdrop-blur-md p-1.5 rounded-2xl shadow-xl border border-gray-200/80">
+          {activePoints.hasDriver && (
+            <button
+              type="button"
+              onClick={handleFocusDriver}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 active:scale-95 text-orange-700 rounded-xl text-xs font-black shadow-xs transition"
+              title="الانتقال إلى موقع السائق"
+            >
+              🚗 موقع السائق
+            </button>
+          )}
+
+          {activePoints.hasPickup && (
+            <button
+              type="button"
+              onClick={handleFocusPickup}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3 py-1.5 bg-green-50 hover:bg-green-100 active:scale-95 text-green-700 rounded-xl text-xs font-black shadow-xs transition"
+              title="الانتقال إلى موقع المعتمر"
+            >
+              👤 المعتمر
+            </button>
+          )}
+
+          {activePoints.hasDropoff && (
+            <button
+              type="button"
+              onClick={handleFocusDropoff}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 active:scale-95 text-red-700 rounded-xl text-xs font-black shadow-xs transition"
+              title="الانتقال إلى الوجهة"
+            >
+              🏁 الوجهة
+            </button>
+          )}
+
+          {activePoints.totalPoints > 1 && (
+            <button
+              type="button"
+              onClick={handleFitAll}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-800 rounded-xl text-xs font-black shadow-xs transition"
+              title="عرض كامل المسار"
+            >
+              🗺️ المسار كاملاً
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

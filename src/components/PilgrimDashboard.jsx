@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Navigation, Clock, CreditCard, User, LogOut, CheckCircle2, Navigation2, Home, Search as SearchIcon, Settings, Wallet, Download, Bell } from 'lucide-react';
+import { MapPin, Navigation, Clock, CreditCard, User, LogOut, CheckCircle2, Navigation2, Home, Search as SearchIcon, Settings, Wallet, Download, Bell, ChevronDown, Check, Building } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
 import RideMap from './RideMap';
 import { setOneSignalRole, requestNotificationPermission, sendPushNotification } from '../lib/onesignal';
+import { DESTINATIONS_DB } from '../lib/destinations';
 
 export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [rideStatus, setRideStatus] = useState('idle'); // idle, requesting, active
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [pickup, setPickup] = useState('فندق أبراج الكسوة');
   const [dropoff, setDropoff] = useState('');
+  const [dropoffCoords, setDropoffCoords] = useState(null);
+  const [isSelectingDropoff, setIsSelectingDropoff] = useState(false);
+  const [destCityTab, setDestCityTab] = useState('makkah');
+  const [destCategory, setDestCategory] = useState('all');
+  const [destSearchQuery, setDestSearchQuery] = useState('');
   const [locationCoords, setLocationCoords] = useState(null);
   const [currentOrderId, setCurrentOrderId] = useState(null);
   const [offeredRide, setOfferedRide] = useState(null);
@@ -226,7 +232,9 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
       status: targetDriverId ? 'pending_driver_approval' : 'pending',
       total_amount: price || 0,
       pickup_latitude: orderCoords?.lat || null,
-      pickup_longitude: orderCoords?.lng || null
+      pickup_longitude: orderCoords?.lng || null,
+      dropoff_latitude: dropoffCoords ? dropoffCoords[0] : null,
+      dropoff_longitude: dropoffCoords ? dropoffCoords[1] : null
     }]).select();
 
     toast.dismiss('order-create');
@@ -473,9 +481,130 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                       <Navigation size={24} />
                     </button>
                   </div>
-                  <div className="relative">
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-red-500"><MapPin size={20} /></div>
-                    <input type="text" value={dropoff} onChange={e => setDropoff(e.target.value)} placeholder="غار حراء، مسجد قباء..." className="w-full bg-gray-50 rounded-2xl py-4 pr-12 pl-4 border border-gray-200 focus:border-red-500 outline-none text-gray-800 font-bold transition" />
+                  {/* Destination Database Selector */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black text-gray-500 mr-1">الوجهة المقصودة (اختر من مزارات ومعالم مكة والمدينة)</label>
+                    <div 
+                      onClick={() => setIsSelectingDropoff(!isSelectingDropoff)} 
+                      className="relative flex items-center justify-between bg-gray-50 hover:bg-orange-50/50 p-4 rounded-2xl border-2 border-gray-200 hover:border-orange-400 cursor-pointer transition shadow-xs"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-red-500"><MapPin size={22} /></div>
+                        <div>
+                          {dropoff ? (
+                            <div className="flex items-center gap-2">
+                              <span className="font-black text-gray-800 text-base">{dropoff}</span>
+                              <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">وجهة محددة</span>
+                            </div>
+                          ) : (
+                            <span className="font-bold text-gray-400 text-sm">اضغط لاختيار وجهتك من مزارات مكة والمدينة...</span>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronDown size={20} className={`text-gray-400 transition-transform ${isSelectingDropoff ? 'rotate-180 text-orange-500' : ''}`} />
+                    </div>
+
+                    {/* Expandable Destination Picker Modal / Drawer */}
+                    {isSelectingDropoff && (
+                      <div className="bg-white rounded-3xl p-4 border border-orange-200 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                        {/* City Toggle Tabs */}
+                        <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1 rounded-2xl">
+                          <button
+                            type="button"
+                            onClick={() => setDestCityTab('makkah')}
+                            className={`py-2.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition ${destCityTab === 'makkah' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                          >
+                            <span>🕋</span> مكة المكرمة
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDestCityTab('madinah')}
+                            className={`py-2.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition ${destCityTab === 'madinah' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                          >
+                            <span>🕌</span> المدينة المنورة
+                          </button>
+                        </div>
+
+                        {/* Search Input Filter */}
+                        <div className="relative">
+                          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400"><SearchIcon size={18} /></div>
+                          <input
+                            type="text"
+                            value={destSearchQuery}
+                            onChange={(e) => setDestSearchQuery(e.target.value)}
+                            placeholder="ابحث عن اسم المعلم، المسجد، الفندق أو المحطة..."
+                            className="w-full bg-gray-50 rounded-xl py-2.5 pr-10 pl-3 border border-gray-200 focus:border-orange-500 outline-none text-xs font-bold text-gray-800"
+                          />
+                        </div>
+
+                        {/* Category Filter Chips */}
+                        <div className="flex gap-1.5 overflow-x-auto pb-1 text-xs">
+                          {[
+                            { id: 'all', label: 'الكل' },
+                            { id: 'mosque', label: 'المساجد' },
+                            { id: 'historical', label: 'المزارات التاريخية' },
+                            { id: 'holy_sites', label: 'المشاعر' },
+                            { id: 'station', label: 'المحطات والمطارات' },
+                            { id: 'hotel', label: 'الفنادق' }
+                          ].map(cat => (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              onClick={() => setDestCategory(cat.id)}
+                              className={`whitespace-nowrap px-3 py-1 rounded-lg font-bold transition ${destCategory === cat.id ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            >
+                              {cat.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Places List */}
+                        <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 divide-y divide-gray-50">
+                          {DESTINATIONS_DB
+                            .filter(place => place.city === destCityTab)
+                            .filter(place => destCategory === 'all' || place.category === destCategory)
+                            .filter(place => !destSearchQuery || place.name.includes(destSearchQuery) || place.categoryName.includes(destSearchQuery))
+                            .map(place => (
+                              <div
+                                key={place.id}
+                                onClick={() => {
+                                  setDropoff(place.name);
+                                  setDropoffCoords([place.lat, place.lng]);
+                                  setIsSelectingDropoff(false);
+                                  toast.success(`تم تحديد الوجهة: ${place.name} 📍`);
+                                }}
+                                className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition ${dropoff === place.name ? 'bg-orange-50 border border-orange-200' : 'hover:bg-gray-50'}`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-xl">{place.icon}</span>
+                                  <div>
+                                    <p className="font-black text-xs text-gray-800">{place.name}</p>
+                                    <p className="text-[10px] text-gray-400 font-bold">{place.categoryName}</p>
+                                  </div>
+                                </div>
+                                {dropoff === place.name && (
+                                  <div className="text-orange-500"><Check size={18} /></div>
+                                )}
+                              </div>
+                            ))}
+                        </div>
+
+                        {/* Custom Input Option */}
+                        <div className="pt-2 border-t border-gray-100">
+                          <p className="text-[11px] font-bold text-gray-400 mb-1.5">أو اكتب وجهة مخصصة يدويًا:</p>
+                          <input
+                            type="text"
+                            value={dropoff}
+                            onChange={(e) => {
+                              setDropoff(e.target.value);
+                              setDropoffCoords(null);
+                            }}
+                            placeholder="مثال: فندق دار الإيمان جراند..."
+                            className="w-full bg-gray-50 rounded-xl py-2 px-3 border border-gray-200 text-xs font-bold text-gray-700 outline-none focus:border-orange-500"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <button onClick={() => handleRequestRide('search')} className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all mt-4 flex items-center justify-center gap-2">
                     <SearchIcon size={24} /> إنشاء الطلب والبحث عن سائق
@@ -543,6 +672,7 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
                     pickupAddress={pickup} 
                     dropoffAddress={dropoff} 
                     pickupCoords={locationCoords ? [locationCoords.lat, locationCoords.lng] : null}
+                    dropoffCoords={dropoffCoords}
                     driverCoords={driverLiveCoords}
                     height="240px"
                     className="mb-6"
