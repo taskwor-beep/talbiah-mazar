@@ -12,13 +12,13 @@ serve(async (req) => {
   }
 
   try {
-    const { bookingId, amount, successUrl, failureUrl, webhookEndpoint, customerName, customerEmail, customerPhone } = await req.json()
-    const CHARGILY_SECRET_KEY = Deno.env.get('CHARGILY_SECRET_KEY')
+    const { bookingId, amount, successUrl, failureUrl, webhookEndpoint, customerName, customerEmail, customerPhone, chargilySecretKey } = await req.json()
+    const CHARGILY_SECRET_KEY = Deno.env.get('CHARGILY_SECRET_KEY') || chargilySecretKey || 'test_sk_jzpV4j750VHFLA2I31c7LORxXhX4uOaVIagtoA8W'
 
     console.log('Received payload:', { bookingId, amount, successUrl, failureUrl, webhookEndpoint })
 
     if (!CHARGILY_SECRET_KEY) {
-      throw new Error('CHARGILY_SECRET_KEY is not set in Edge Function secrets')
+      throw new Error('CHARGILY_SECRET_KEY is not set')
     }
 
     // Chargily v2 requires amount to be an integer (e.g., 5000) and >= 100

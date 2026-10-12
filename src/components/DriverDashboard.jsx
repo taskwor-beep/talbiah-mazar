@@ -38,9 +38,9 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const activeRideRef = React.useRef(null);
 
 
-  // Track driver live GPS
+  // Track driver live GPS only when there is an active ride
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation || !activeRide) return;
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -64,13 +64,13 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     return () => {
       navigator.geolocation.clearWatch(watchId);
     };
-  }, [driverId]);
+  }, [driverId, activeRide]);
 
   useEffect(() => {
     setOneSignalRole('driver', userName);
     requestNotificationPermission();
     fetchDriverData();
-    handleRefreshDriverGps();
+    // Do not call handleRefreshDriverGps() on initial mount to respect user request
   }, [userName]);
 
   const fetchDriverData = async () => {

@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-const CHARGILY_SECRET = 'test_sk_uO50mXQkSCDsF35MGSzCuD0PJOlRhBhfsrQgFsCk';
+const CHARGILY_SECRET = Deno.env.get('CHARGILY_SECRET_KEY') || 'test_sk_jzpV4j750VHFLA2I31c7LORxXhX4uOaVIagtoA8W';
 
 serve(async (req) => {
   try {
