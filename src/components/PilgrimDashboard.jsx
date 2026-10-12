@@ -3,7 +3,8 @@ import {
   MapPin, Navigation, Clock, CreditCard, User, LogOut, CheckCircle2, 
   Navigation2, Home, Search as SearchIcon, Settings, Wallet, Download, 
   Bell, ChevronDown, Check, Building, ShieldCheck, AlertCircle, Calendar, 
-  RefreshCw, Phone, MessageCircle, Car, Info, Sparkles, CheckCircle, ArrowRight, ExternalLink 
+  RefreshCw, Phone, MessageCircle, Car, Info, Sparkles, CheckCircle, ArrowRight, ExternalLink,
+  Pencil, Save, X, Mail
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
@@ -13,7 +14,20 @@ import { setOneSignalRole, requestNotificationPermission, sendPushNotification }
 import { DESTINATIONS_DB } from '../lib/destinations';
 import { getReliablePosition } from '../lib/geo';
 
-export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
+export default function PilgrimDashboard({ userName: initialUserName, onLogout, onGoHome, onUpdateUserName }) {
+  const [userName, setUserName] = useState(initialUserName || '');
+  const [userPhone, setUserPhone] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [userId, setUserId] = useState(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [editForm, setEditForm] = useState({
+    full_name: initialUserName || '',
+    phone_number: '',
+    email: '',
+    hotel: 'فندق أبراج الكسوة'
+  });
+
   const [activeTab, setActiveTab] = useState('book'); // 'book', 'history', 'payment', 'settings'
   const [rideStatus, setRideStatus] = useState('idle'); // idle, requesting, active
   const [selectedPackage, setSelectedPackage] = useState(null);
@@ -36,10 +50,18 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
   const [isLoadingTrips, setIsLoadingTrips] = useState(false);
 
   useEffect(() => {
+    if (initialUserName && initialUserName !== userName) {
+      setUserName(initialUserName);
+      setEditForm(prev => ({ ...prev, full_name: initialUserName }));
+    }
+  }, [initialUserName]);
+
+  useEffect(() => {
     setOneSignalRole('pilgrim', userName);
     requestNotificationPermission();
     fetchData();
     fetchPastTrips();
+    fetchUserProfile();
 
     // Check if returning from Chargily checkout
     const urlParams = new URLSearchParams(window.location.search);
@@ -61,6 +83,117 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      const searchName = userName || initialUserName;
+      if (!searchName) return;
+      const { data: userData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('full_name', searchName)
+        .limit(1)
+        .maybeSingle();
+
+      if (userData) {
+        setUserId(userData.id);
+        setUserName(userData.full_name);
+        setUserPhone(userData.phone_number || '');
+        setUserEmail(userData.email || '');
+        setEditForm({
+          full_name: userData.full_name || '',
+          phone_number: userData.phone_number || '',
+          email: userData.email || '',
+          hotel: pickup || 'فندق أبراج الكسوة'
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch user profile:', err);
+    }
+  };
+
+  const handleSaveProfile = async (e) => {
+    if (e) e.preventDefault();
+    if (!editForm.full_name.trim()) {
+      return toast.error('يرجى إدخال الاسم الكامل');
+    }
+
+    setIsSavingProfile(true);
+    const toastId = toast.loading('جاري حفظ بيانات الملف الشخصي...');
+
+    try {
+      const trimmedName = editForm.full_name.trim();
+      const trimmedPhone = editForm.phone_number.trim();
+      const trimmedEmail = editForm.email.trim();
+      const trimmedHotel = editForm.hotel.trim();
+
+      let targetId = userId;
+
+      if (!targetId) {
+        const { data: existingUser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('full_name', userName)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingUser) {
+          targetId = existingUser.id;
+        }
+      }
+
+      if (targetId) {
+        const { error } = await supabase
+          .from('users')
+          .update({
+            full_name: trimmedName,
+            phone_number: trimmedPhone || null,
+            email: trimmedEmail || null
+          })
+          .eq('id', targetId);
+
+        if (error) throw error;
+      } else {
+        const { data: newUser, error } = await supabase
+          .from('users')
+          .insert([{
+            full_name: trimmedName,
+            phone_number: trimmedPhone || '0500000000',
+            email: trimmedEmail || null,
+            role: 'pilgrim'
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+        if (newUser) {
+          targetId = newUser.id;
+          setUserId(newUser.id);
+        }
+      }
+
+      setUserName(trimmedName);
+      setUserPhone(trimmedPhone);
+      setUserEmail(trimmedEmail);
+      if (trimmedHotel) {
+        setPickup(trimmedHotel);
+      }
+
+      localStorage.setItem('userName', trimmedName);
+      if (onUpdateUserName) {
+        onUpdateUserName(trimmedName);
+      }
+
+      setIsEditingProfile(false);
+      toast.success('تم تحديث ملفك الشخصي بنجاح! ✨', { id: toastId });
+      fetchPastTrips();
+    } catch (err) {
+      console.error('Failed to update profile:', err);
+      toast.error('حدث خطأ أثناء حفظ الملف الشخصي: ' + err.message, { id: toastId });
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   const fetchPastTrips = async () => {
     setIsLoadingTrips(true);
@@ -576,13 +709,29 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
         </nav>
 
         <div className="pt-6 border-t border-gray-100 mt-auto">
-          <div className="flex items-center gap-3 mb-4 p-2">
-            <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-500">
+          <div 
+            onClick={() => {
+              setActiveTab('settings');
+              setIsEditingProfile(true);
+              setEditForm({
+                full_name: userName || '',
+                phone_number: userPhone || '',
+                email: userEmail || '',
+                hotel: pickup || 'فندق أبراج الكسوة'
+              });
+            }}
+            className="flex items-center gap-3 mb-4 p-2 rounded-2xl hover:bg-orange-50/70 cursor-pointer transition group"
+            title="تعديل الملف الشخصي"
+          >
+            <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 group-hover:scale-105 transition-transform shrink-0">
               <User size={20} />
             </div>
-            <div>
-              <p className="font-bold text-sm text-gray-800 truncate w-32">{userName}</p>
-              <p className="text-xs text-gray-500 font-bold">معتمر / حاج</p>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <p className="font-bold text-sm text-gray-800 truncate">{userName}</p>
+                <Pencil size={12} className="text-gray-400 group-hover:text-orange-500 mr-1" />
+              </div>
+              <p className="text-xs text-gray-400 font-bold">معتمر / حاج • تعديل</p>
             </div>
           </div>
           <button onClick={onLogout} className="w-full flex items-center gap-3 p-3 text-red-500 hover:bg-red-50 rounded-xl font-bold transition">
@@ -1445,20 +1594,168 @@ export default function PilgrimDashboard({ userName, onLogout, onGoHome }) {
             </div>
 
             {/* Profile Card */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-4">
-              <h3 className="font-black text-gray-800 text-lg flex items-center gap-2">
-                <User size={20} className="text-orange-500" /> الملف الشخصي
-              </h3>
-              <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-red-500 text-white rounded-2xl flex items-center justify-center font-black text-2xl shadow-md">
-                  {userName ? userName[0].toUpperCase() : 'م'}
-                </div>
-                <div>
-                  <h4 className="font-black text-gray-900 text-lg">{userName || 'معتمر كريم'}</h4>
-                  <p className="text-xs font-bold text-gray-500">حساب معتمر / زائر في منصة مزار</p>
-                  <span className="inline-block mt-1 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">حساب نشط</span>
-                </div>
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 space-y-5">
+              <div className="flex justify-between items-center">
+                <h3 className="font-black text-gray-800 text-lg flex items-center gap-2">
+                  <User size={20} className="text-orange-500" /> الملف الشخصي وبيانات المعتمر
+                </h3>
+                {!isEditingProfile && (
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setEditForm({
+                        full_name: userName || '',
+                        phone_number: userPhone || '',
+                        email: userEmail || '',
+                        hotel: pickup || 'فندق أبراج الكسوة'
+                      });
+                      setIsEditingProfile(true);
+                    }}
+                    className="flex items-center gap-1.5 bg-orange-50 hover:bg-orange-100 text-orange-600 font-bold px-4 py-2 rounded-xl text-xs transition border border-orange-200"
+                  >
+                    <Pencil size={14} /> تعديل البيانات
+                  </button>
+                )}
               </div>
+
+              {!isEditingProfile ? (
+                /* View Mode */
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                    <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-red-500 text-white rounded-2xl flex items-center justify-center font-black text-2xl shadow-md shrink-0">
+                      {userName ? userName[0].toUpperCase() : 'م'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-black text-gray-900 text-lg">{userName || 'معتمر كريم'}</h4>
+                        <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full">حساب نشط</span>
+                      </div>
+                      <p className="text-xs font-bold text-gray-500 mt-0.5">معتمر / زائر في المشاعر المقدسة</p>
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100">
+                      <span className="text-[11px] font-bold text-gray-400 block mb-1 flex items-center gap-1">
+                        <Phone size={12} className="text-orange-500" /> رقم الهاتف / واتساب
+                      </span>
+                      <span className="text-sm font-black text-gray-800" dir="ltr">
+                        {userPhone || 'لم يُحدد بعد'}
+                      </span>
+                    </div>
+
+                    <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100">
+                      <span className="text-[11px] font-bold text-gray-400 block mb-1 flex items-center gap-1">
+                        <Mail size={12} className="text-orange-500" /> البريد الإلكتروني
+                      </span>
+                      <span className="text-sm font-black text-gray-800 truncate block">
+                        {userEmail || 'اختياري'}
+                      </span>
+                    </div>
+
+                    <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-100">
+                      <span className="text-[11px] font-bold text-gray-400 block mb-1 flex items-center gap-1">
+                        <Building size={12} className="text-orange-500" /> الفندق المعتاد للانطلاق
+                      </span>
+                      <span className="text-sm font-black text-gray-800 truncate block">
+                        {pickup || 'فندق أبراج الكسوة'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Edit Mode */
+                <form onSubmit={handleSaveProfile} className="space-y-4 bg-orange-50/40 p-5 rounded-2xl border border-orange-100">
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                        الاسم الكامل للمعتمر <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <User size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          required
+                          value={editForm.full_name}
+                          onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                          className="w-full bg-white border border-gray-200 rounded-xl pr-10 pl-4 py-2.5 text-sm font-bold text-gray-800 outline-none focus:border-orange-500 transition"
+                          placeholder="مثال: محمد عبد الله"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                        رقم الهاتف / واتساب للتواصل <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Phone size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="tel"
+                          required
+                          dir="ltr"
+                          value={editForm.phone_number}
+                          onChange={(e) => setEditForm({ ...editForm, phone_number: e.target.value })}
+                          className="w-full bg-white border border-gray-200 rounded-xl pr-10 pl-4 py-2.5 text-sm font-bold text-gray-800 outline-none focus:border-orange-500 transition text-right"
+                          placeholder="مثال: +213697953761 أو 05..."
+                        />
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-1 font-bold">ضروري ليتواصل معك السائق فور قبول مشوارك</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                        البريد الإلكتروني (اختياري)
+                      </label>
+                      <div className="relative">
+                        <Mail size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="email"
+                          value={editForm.email}
+                          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                          className="w-full bg-white border border-gray-200 rounded-xl pr-10 pl-4 py-2.5 text-sm font-bold text-gray-800 outline-none focus:border-orange-500 transition"
+                          placeholder="example@mail.com"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                        فندق الإقامة الافتراضي في مكة / المدينة
+                      </label>
+                      <div className="relative">
+                        <Building size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          value={editForm.hotel}
+                          onChange={(e) => setEditForm({ ...editForm, hotel: e.target.value })}
+                          className="w-full bg-white border border-gray-200 rounded-xl pr-10 pl-4 py-2.5 text-sm font-bold text-gray-800 outline-none focus:border-orange-500 transition"
+                          placeholder="مثال: فندق أبراج الكسوة"
+                        />
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-1 font-bold">سيظهر كنقطة انطلاق افتراضية عند طلب المشاوير</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2 border-t border-orange-100">
+                    <button
+                      type="submit"
+                      disabled={isSavingProfile}
+                      className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 text-white font-black px-6 py-2.5 rounded-xl text-sm transition shadow-md flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <Save size={16} />
+                      {isSavingProfile ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingProfile(false)}
+                      className="bg-white hover:bg-gray-100 text-gray-600 font-bold px-4 py-2.5 rounded-xl text-sm transition border border-gray-200 flex items-center gap-1.5"
+                    >
+                      <X size={16} /> إلغاء
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
 
             {/* Notifications & GPS Privacy Settings */}

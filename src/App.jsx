@@ -149,7 +149,15 @@ export default function App() {
         ) : userRole === 'driver' ? (
           <DriverDashboard userName={userName} onLogout={handleLogout} onGoHome={() => setCurrentView('landing')} />
         ) : (
-          <PilgrimDashboard userName={userName} onLogout={handleLogout} onGoHome={() => setCurrentView('landing')} />
+          <PilgrimDashboard 
+            userName={userName} 
+            onLogout={handleLogout} 
+            onGoHome={() => setCurrentView('landing')} 
+            onUpdateUserName={(newName) => {
+              setUserName(newName);
+              localStorage.setItem('userName', newName);
+            }}
+          />
         )}
       </>
     );
