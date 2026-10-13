@@ -59,12 +59,20 @@ export default function RideMap({
   const [geocodedPickup, setGeocodedPickup] = useState(null);
   const [geocodedDropoff, setGeocodedDropoff] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [currentFocus, setCurrentFocus] = useState(null); // 'driver' | 'pickup' | 'dropoff' | 'all' | null
 
-  // Stored coordinate refs for instant camera flying/focus
+  // Stored coordinate refs for instant camera focus
   const pCoordsRef = useRef(null);
   const dCoordsRef = useRef(null);
   const dvrCoordsRef = useRef(null);
   const boundsPointsRef = useRef([]);
+
+  // Marker instance refs to control popups and highlights
+  const pickupMarkerRef = useRef(null);
+  const dropoffMarkerRef = useRef(null);
+  const driverMarkerRef = useRef(null);
+  const hasInitialFittedRef = useRef(false);
+  const userManualFocusRef = useRef(null);
 
   const [activePoints, setActivePoints] = useState({ hasDriver: false, hasPickup: false, hasDropoff: false, totalPoints: 0 });
 
@@ -178,6 +186,13 @@ export default function RideMap({
       }).addTo(map);
 
       L.control.zoom({ position: 'topleft' }).addTo(map);
+
+      // Reset manual focus when user pans or drags the map manually
+      map.on('dragstart', () => {
+        userManualFocusRef.current = null;
+        setCurrentFocus(null);
+      });
+
       mapInstanceRef.current = map;
     }
 
@@ -190,6 +205,10 @@ export default function RideMap({
       }
     });
 
+    pickupMarkerRef.current = null;
+    dropoffMarkerRef.current = null;
+    driverMarkerRef.current = null;
+
     const boundsPoints = [];
 
     // 1. Create Pickup Marker (Real Location)
@@ -197,17 +216,30 @@ export default function RideMap({
       const pickupIcon = L.divIcon({
         className: 'custom-map-marker',
         html: `
-          <div style="background-color: #16a34a; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 3px solid #ffffff;">
-            <span style="color: white; font-size: 14px; font-weight: bold;">أ</span>
+          <div style="background-color: #16a34a; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(22, 163, 74, 0.5); border: 3px solid #ffffff; position: relative;">
+            <span style="color: white; font-size: 16px; font-weight: 900;">📍</span>
+            <div style="position: absolute; inset: -6px; border: 2px solid #16a34a; border-radius: 50%; opacity: 0.6; animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
           </div>
         `,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18]
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+        popupAnchor: [0, -22]
       });
 
-      L.marker(pCoords, { icon: pickupIcon })
+      const pMarker = L.marker(pCoords, { icon: pickupIcon })
         .addTo(map)
-        .bindPopup(`<b>نقطة الانطلاق (المعتمر):</b><br/>${pickupAddress || 'الموقع الحالي'}`);
+        .bindPopup(`
+          <div dir="rtl" style="text-align: right; font-family: inherit; min-width: 170px;">
+            <div style="font-weight: 900; color: #16a34a; font-size: 13px; margin-bottom: 3px;">📍 موقع المعتمر (الانطلاق)</div>
+            <div style="font-size: 12px; color: #1f2937; font-weight: bold; line-height: 1.4;">${pickupAddress || 'الموقع الحالي للمعتمر'}</div>
+          </div>
+        `, { autoPan: true, autoPanPadding: [30, 30] });
+
+      pickupMarkerRef.current = pMarker;
+      pMarker.on('click', () => {
+        userManualFocusRef.current = 'pickup';
+        setCurrentFocus('pickup');
+      });
       boundsPoints.push(pCoords);
     }
 
@@ -216,17 +248,29 @@ export default function RideMap({
       const dropoffIcon = L.divIcon({
         className: 'custom-map-marker',
         html: `
-          <div style="background-color: #dc2626; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 3px solid #ffffff;">
-            <span style="color: white; font-size: 14px; font-weight: bold;">ب</span>
+          <div style="background-color: #dc2626; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(220, 38, 38, 0.5); border: 3px solid #ffffff; position: relative;">
+            <span style="color: white; font-size: 16px; font-weight: 900;">🏁</span>
           </div>
         `,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18]
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+        popupAnchor: [0, -22]
       });
 
-      L.marker(dCoords, { icon: dropoffIcon })
+      const dMarker = L.marker(dCoords, { icon: dropoffIcon })
         .addTo(map)
-        .bindPopup(`<b>نقطة الوصول (الوجهة):</b><br/>${dropoffAddress || 'الوجهة'}`);
+        .bindPopup(`
+          <div dir="rtl" style="text-align: right; font-family: inherit; min-width: 170px;">
+            <div style="font-weight: 900; color: #dc2626; font-size: 13px; margin-bottom: 3px;">🏁 وجهة الوصول (النزول)</div>
+            <div style="font-size: 12px; color: #1f2937; font-weight: bold; line-height: 1.4;">${dropoffAddress || 'الوجهة المحددة'}</div>
+          </div>
+        `, { autoPan: true, autoPanPadding: [30, 30] });
+
+      dropoffMarkerRef.current = dMarker;
+      dMarker.on('click', () => {
+        userManualFocusRef.current = 'dropoff';
+        setCurrentFocus('dropoff');
+      });
       boundsPoints.push(dCoords);
     }
 
@@ -235,17 +279,30 @@ export default function RideMap({
       const driverIcon = L.divIcon({
         className: 'custom-map-marker',
         html: `
-          <div style="background-color: #ea580c; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(234, 88, 12, 0.6); border: 3px solid #ffffff; animation: pulse 2s infinite;">
+          <div style="background-color: #ea580c; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(234, 88, 12, 0.6); border: 3px solid #ffffff; position: relative;">
             <span style="font-size: 24px;">🚗</span>
+            <div style="position: absolute; inset: -6px; border: 2px solid #ea580c; border-radius: 50%; opacity: 0.7; animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
           </div>
         `,
-        iconSize: [44, 44],
-        iconAnchor: [22, 22]
+        iconSize: [46, 46],
+        iconAnchor: [23, 23],
+        popupAnchor: [0, -25]
       });
 
-      L.marker(validDriverCoords, { icon: driverIcon })
+      const dvrMarker = L.marker(validDriverCoords, { icon: driverIcon })
         .addTo(map)
-        .bindPopup('<b>موقع السائق المباشر (GPS) 🚗</b>');
+        .bindPopup(`
+          <div dir="rtl" style="text-align: right; font-family: inherit; min-width: 170px;">
+            <div style="font-weight: 900; color: #ea580c; font-size: 13px; margin-bottom: 3px;">🚗 موقع السائق المباشر (GPS)</div>
+            <div style="font-size: 11px; color: #4b5563; font-weight: bold;">يتم تحديث موقع السيارة مباشرة أثناء السير</div>
+          </div>
+        `, { autoPan: true, autoPanPadding: [30, 30] });
+
+      driverMarkerRef.current = dvrMarker;
+      dvrMarker.on('click', () => {
+        userManualFocusRef.current = 'driver';
+        setCurrentFocus('driver');
+      });
       boundsPoints.push(validDriverCoords);
     }
 
@@ -278,11 +335,19 @@ export default function RideMap({
       totalPoints: boundsPoints.length
     });
 
-    // Adjust view to contain all real markers
-    if (boundsPoints.length > 1) {
-      map.fitBounds(L.latLngBounds(boundsPoints), { padding: [50, 50], maxZoom: 16 });
-    } else if (boundsPoints.length === 1) {
-      map.setView(boundsPoints[0], 15);
+    // Adjust view: Only fitBounds initially or if user hasn't explicitly focused on a specific marker
+    if (!hasInitialFittedRef.current || !userManualFocusRef.current) {
+      if (boundsPoints.length > 1) {
+        map.fitBounds(L.latLngBounds(boundsPoints), { padding: [50, 50], maxZoom: 16 });
+        hasInitialFittedRef.current = true;
+      } else if (boundsPoints.length === 1) {
+        map.setView(boundsPoints[0], 16);
+        hasInitialFittedRef.current = true;
+      }
+    } else if (userManualFocusRef.current === 'driver' && validDriverCoords) {
+      try {
+        map.panTo(validDriverCoords, { animate: true });
+      } catch (e) {}
     }
 
     const invTimer = setTimeout(() => {
@@ -313,38 +378,59 @@ export default function RideMap({
 
   // Control handlers
   const handleFocusDriver = () => {
+    setCurrentFocus('driver');
+    userManualFocusRef.current = 'driver';
     const map = mapInstanceRef.current;
-    if (map && map._mapPane && dvrCoordsRef.current) {
+    const coords = dvrCoordsRef.current;
+    if (map && map._mapPane && coords) {
       try {
-        map.flyTo(dvrCoordsRef.current, 16, { duration: 1 });
+        map.setView(coords, 17, { animate: true });
+        if (driverMarkerRef.current) {
+          driverMarkerRef.current.openPopup();
+        }
       } catch (e) {}
     }
   };
 
   const handleFocusPickup = () => {
+    setCurrentFocus('pickup');
+    userManualFocusRef.current = 'pickup';
     const map = mapInstanceRef.current;
-    if (map && map._mapPane && pCoordsRef.current) {
+    const coords = pCoordsRef.current;
+    if (map && map._mapPane && coords) {
       try {
-        map.flyTo(pCoordsRef.current, 16, { duration: 1 });
+        map.setView(coords, 17, { animate: true });
+        if (pickupMarkerRef.current) {
+          pickupMarkerRef.current.openPopup();
+        }
       } catch (e) {}
     }
   };
 
   const handleFocusDropoff = () => {
+    setCurrentFocus('dropoff');
+    userManualFocusRef.current = 'dropoff';
     const map = mapInstanceRef.current;
-    if (map && map._mapPane && dCoordsRef.current) {
+    const coords = dCoordsRef.current;
+    if (map && map._mapPane && coords) {
       try {
-        map.flyTo(dCoordsRef.current, 16, { duration: 1 });
+        map.setView(coords, 17, { animate: true });
+        if (dropoffMarkerRef.current) {
+          dropoffMarkerRef.current.openPopup();
+        }
       } catch (e) {}
     }
   };
 
   const handleFitAll = () => {
+    setCurrentFocus('all');
+    userManualFocusRef.current = null;
     const map = mapInstanceRef.current;
     if (map && map._mapPane && boundsPointsRef.current.length > 0) {
       try {
+        map.closePopup();
         if (boundsPointsRef.current.length === 1) {
-          map.flyTo(boundsPointsRef.current[0], 15);
+          map.setView(boundsPointsRef.current[0], 15, { animate: true });
         } else {
           map.fitBounds(L.latLngBounds(boundsPointsRef.current), { padding: [50, 50] });
         }
@@ -406,10 +492,16 @@ export default function RideMap({
             <button
               type="button"
               onClick={handleFocusDriver}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 active:scale-95 text-orange-700 rounded-xl text-xs font-black shadow-xs transition"
-              title="الانتقال إلى موقع السائق"
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black shadow-xs transition active:scale-95 ${
+                currentFocus === 'driver'
+                  ? 'bg-orange-500 text-white shadow-md ring-2 ring-orange-300'
+                  : 'bg-orange-50 hover:bg-orange-100 text-orange-700'
+              }`}
+              title="الانتقال إلى موقع السائق وتحديده"
             >
-              🚗 موقع السائق
+              <span>🚗</span>
+              <span>موقع السائق</span>
+              {currentFocus === 'driver' && <span className="text-[10px]">✓</span>}
             </button>
           )}
 
@@ -417,10 +509,16 @@ export default function RideMap({
             <button
               type="button"
               onClick={handleFocusPickup}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3 py-1.5 bg-green-50 hover:bg-green-100 active:scale-95 text-green-700 rounded-xl text-xs font-black shadow-xs transition"
-              title="الانتقال إلى موقع المعتمر"
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black shadow-xs transition active:scale-95 ${
+                currentFocus === 'pickup'
+                  ? 'bg-green-600 text-white shadow-md ring-2 ring-green-300'
+                  : 'bg-green-50 hover:bg-green-100 text-green-700'
+              }`}
+              title="الانتقال إلى موقع المعتمر وتحديده"
             >
-              👤 المعتمر
+              <span>👤</span>
+              <span>المعتمر</span>
+              {currentFocus === 'pickup' && <span className="text-[10px]">✓</span>}
             </button>
           )}
 
@@ -428,10 +526,16 @@ export default function RideMap({
             <button
               type="button"
               onClick={handleFocusDropoff}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 active:scale-95 text-red-700 rounded-xl text-xs font-black shadow-xs transition"
-              title="الانتقال إلى الوجهة"
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black shadow-xs transition active:scale-95 ${
+                currentFocus === 'dropoff'
+                  ? 'bg-red-600 text-white shadow-md ring-2 ring-red-300'
+                  : 'bg-red-50 hover:bg-red-100 text-red-700'
+              }`}
+              title="الانتقال إلى وجهة النزول وتحديدها"
             >
-              🏁 الوجهة
+              <span>🏁</span>
+              <span>الوجهة</span>
+              {currentFocus === 'dropoff' && <span className="text-[10px]">✓</span>}
             </button>
           )}
 
@@ -439,10 +543,15 @@ export default function RideMap({
             <button
               type="button"
               onClick={handleFitAll}
-              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-800 rounded-xl text-xs font-black shadow-xs transition"
-              title="عرض كامل المسار"
+              className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black shadow-xs transition active:scale-95 ${
+                currentFocus === 'all'
+                  ? 'bg-gray-800 text-white shadow-md ring-2 ring-gray-400'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+              }`}
+              title="عرض كامل المسار والنقاط"
             >
-              🗺️ المسار
+              <span>🗺️</span>
+              <span>كامل المسار</span>
             </button>
           )}
 
