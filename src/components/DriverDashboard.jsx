@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet, Plus, Trash2, AlertCircle, Volume2, User, Phone, ShieldCheck, Key, RefreshCw, Send, CheckCircle2, Clock, ArrowDownLeft, ArrowUpRight, Percent, Award, Sparkles, CreditCard, ChevronRight, FileText, CheckCircle } from 'lucide-react';
+import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet, Plus, Trash2, AlertCircle, Volume2, User, Phone, ShieldCheck, Key, RefreshCw, Send, CheckCircle2, Clock, ArrowDownLeft, ArrowUpRight, Percent, Award, Sparkles, CreditCard, ChevronRight, FileText, CheckCircle, Star } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';

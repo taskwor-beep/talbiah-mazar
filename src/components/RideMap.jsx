@@ -125,11 +125,14 @@ export default function RideMap({
     window.addEventListener('keydown', handleKeyDown);
 
     const handleResize = () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
-        if (boundsPointsRef.current.length > 1) {
-          mapInstanceRef.current.fitBounds(L.latLngBounds(boundsPointsRef.current), { padding: [50, 50] });
-        }
+      const map = mapInstanceRef.current;
+      if (map && map._mapPane && mapContainerRef.current) {
+        try {
+          map.invalidateSize();
+          if (boundsPointsRef.current.length > 1) {
+            map.fitBounds(L.latLngBounds(boundsPointsRef.current), { padding: [50, 50] });
+          }
+        } catch (e) {}
       }
     };
 
@@ -282,16 +285,27 @@ export default function RideMap({
       map.setView(boundsPoints[0], 15);
     }
 
-    setTimeout(() => {
-      map.invalidateSize();
+    const invTimer = setTimeout(() => {
+      const currentMap = mapInstanceRef.current;
+      if (currentMap && currentMap._mapPane && mapContainerRef.current) {
+        try {
+          currentMap.invalidateSize();
+        } catch (e) {}
+      }
     }, 200);
+
+    return () => {
+      clearTimeout(invTimer);
+    };
 
   }, [pickupAddress, dropoffAddress, driverCoords, pickupCoords, dropoffCoords, geocodedPickup, geocodedDropoff]);
 
   useEffect(() => {
     return () => {
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+        try {
+          mapInstanceRef.current.remove();
+        } catch (e) {}
         mapInstanceRef.current = null;
       }
     };
@@ -299,30 +313,42 @@ export default function RideMap({
 
   // Control handlers
   const handleFocusDriver = () => {
-    if (mapInstanceRef.current && dvrCoordsRef.current) {
-      mapInstanceRef.current.flyTo(dvrCoordsRef.current, 16, { duration: 1 });
+    const map = mapInstanceRef.current;
+    if (map && map._mapPane && dvrCoordsRef.current) {
+      try {
+        map.flyTo(dvrCoordsRef.current, 16, { duration: 1 });
+      } catch (e) {}
     }
   };
 
   const handleFocusPickup = () => {
-    if (mapInstanceRef.current && pCoordsRef.current) {
-      mapInstanceRef.current.flyTo(pCoordsRef.current, 16, { duration: 1 });
+    const map = mapInstanceRef.current;
+    if (map && map._mapPane && pCoordsRef.current) {
+      try {
+        map.flyTo(pCoordsRef.current, 16, { duration: 1 });
+      } catch (e) {}
     }
   };
 
   const handleFocusDropoff = () => {
-    if (mapInstanceRef.current && dCoordsRef.current) {
-      mapInstanceRef.current.flyTo(dCoordsRef.current, 16, { duration: 1 });
+    const map = mapInstanceRef.current;
+    if (map && map._mapPane && dCoordsRef.current) {
+      try {
+        map.flyTo(dCoordsRef.current, 16, { duration: 1 });
+      } catch (e) {}
     }
   };
 
   const handleFitAll = () => {
-    if (mapInstanceRef.current && boundsPointsRef.current.length > 0) {
-      if (boundsPointsRef.current.length === 1) {
-        mapInstanceRef.current.flyTo(boundsPointsRef.current[0], 15);
-      } else {
-        mapInstanceRef.current.fitBounds(L.latLngBounds(boundsPointsRef.current), { padding: [50, 50] });
-      }
+    const map = mapInstanceRef.current;
+    if (map && map._mapPane && boundsPointsRef.current.length > 0) {
+      try {
+        if (boundsPointsRef.current.length === 1) {
+          map.flyTo(boundsPointsRef.current[0], 15);
+        } else {
+          map.fitBounds(L.latLngBounds(boundsPointsRef.current), { padding: [50, 50] });
+        }
+      } catch (e) {}
     }
   };
 
