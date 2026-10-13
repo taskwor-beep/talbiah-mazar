@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet, Plus, Trash2, AlertCircle, Volume2 } from 'lucide-react';
+import { MapPin, Navigation, DollarSign, LogOut, Check, X as CloseIcon, Car, Home, List as ListIcon, Wallet, Plus, Trash2, AlertCircle, Volume2, User, Phone, ShieldCheck, Key, RefreshCw, Send, CheckCircle2, Clock, ArrowDownLeft, ArrowUpRight, Percent, Award, Sparkles, CreditCard, ChevronRight, FileText, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
@@ -13,7 +13,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   
   const [requests, setRequests] = useState([]);
   const [stats, setStats] = useState({ earnings: 0, completedRides: 0, rating: 5.0 });
-  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'offers'
+  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'offers' | 'wallet' | 'profile'
   
   const [offers, setOffers] = useState([]);
   const [packages, setPackages] = useState([]);
@@ -22,6 +22,34 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   const [pricePrompt, setPricePrompt] = useState(null);
   const [newOfferPrice, setNewOfferPrice] = useState('');
   const [rejectedOrders, setRejectedOrders] = useState([]);
+
+  // Driver Profile & Edit State
+  const [driverProfile, setDriverProfile] = useState({
+    userId: null,
+    driverId: null,
+    full_name: userName || '',
+    phone_number: '',
+    vehicle_type: 'سيارة سيدان',
+    license_plate: '',
+    rating: 5.0,
+    total_deliveries: 0,
+    status: 'approved'
+  });
+  const [profileForm, setProfileForm] = useState({
+    full_name: userName || '',
+    phone_number: '',
+    vehicle_type: 'سيارة سيدان',
+    license_plate: '',
+    new_password: ''
+  });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Driver Wallet & Platform Commission State
+  const [walletOrders, setWalletOrders] = useState([]);
+  const [commissionRate, setCommissionRate] = useState(10);
+  const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false);
+  const [settlementForm, setSettlementForm] = useState({ ccp_number: '', notes: '' });
+  const [isSubmittingSettlement, setIsSubmittingSettlement] = useState(false);
   
   // New Offer State
   const [newOffer, setNewOffer] = useState({ title: '', priceDZD: '', details: '' });
@@ -74,28 +102,79 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   }, [userName]);
 
   const fetchDriverData = async () => {
-    // For demo: get driver by user name, or just first driver
-    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).limit(1).maybeSingle();
+    // Get driver by user name, or just first driver
+    const { data: userData } = await supabase.from('users').select('*').eq('full_name', userName).limit(1).maybeSingle();
     let currentDriverId = null;
     let currentDriverRating = 5.0;
     
     if (userData) {
-      const { data: driverInfo } = await supabase.from('drivers').select('id, status, rating').eq('user_id', userData.id).limit(1).maybeSingle();
+      const { data: driverInfo } = await supabase.from('drivers').select('*').eq('user_id', userData.id).limit(1).maybeSingle();
       if (driverInfo) {
         currentDriverId = driverInfo.id;
-        setDriverStatus(driverInfo.status);
+        setDriverStatus(driverInfo.status || 'approved');
         if (driverInfo.rating) currentDriverRating = driverInfo.rating;
+
+        const profileData = {
+          userId: userData.id,
+          driverId: driverInfo.id,
+          full_name: userData.full_name || userName,
+          phone_number: userData.phone_number || '',
+          vehicle_type: driverInfo.vehicle_type || 'سيارة سيدان',
+          license_plate: driverInfo.license_plate || '',
+          rating: driverInfo.rating || 5.0,
+          total_deliveries: driverInfo.total_deliveries || 0,
+          status: driverInfo.status || 'approved'
+        };
+        setDriverProfile(profileData);
+        setProfileForm({
+          full_name: userData.full_name || userName,
+          phone_number: userData.phone_number || '',
+          vehicle_type: driverInfo.vehicle_type || 'سيارة سيدان',
+          license_plate: driverInfo.license_plate || '',
+          new_password: ''
+        });
       }
     }
     
     // Fallback if not found
     if (!currentDriverId) {
-      const { data: firstDriver } = await supabase.from('drivers').select('id, rating, status').limit(1).maybeSingle();
+      const { data: firstDriver } = await supabase.from('drivers').select('*, users(*)').limit(1).maybeSingle();
       if (firstDriver) {
         currentDriverId = firstDriver.id;
         if (firstDriver.status) setDriverStatus(firstDriver.status);
         if (firstDriver.rating) currentDriverRating = firstDriver.rating;
+
+        const fallbackUser = firstDriver.users;
+        const profileData = {
+          userId: fallbackUser?.id || null,
+          driverId: firstDriver.id,
+          full_name: fallbackUser?.full_name || userName,
+          phone_number: fallbackUser?.phone_number || '',
+          vehicle_type: firstDriver.vehicle_type || 'سيارة سيدان',
+          license_plate: firstDriver.license_plate || '',
+          rating: firstDriver.rating || 5.0,
+          total_deliveries: firstDriver.total_deliveries || 0,
+          status: firstDriver.status || 'approved'
+        };
+        setDriverProfile(profileData);
+        setProfileForm({
+          full_name: fallbackUser?.full_name || userName,
+          phone_number: fallbackUser?.phone_number || '',
+          vehicle_type: firstDriver.vehicle_type || 'سيارة سيدان',
+          license_plate: firstDriver.license_plate || '',
+          new_password: ''
+        });
       }
+    }
+
+    // Fetch platform commission percentage from admin_settings
+    try {
+      const { data: commData } = await supabase.from('admin_settings').select('value').eq('key', 'platform_commission').maybeSingle();
+      if (commData?.value?.percentage != null) {
+        setCommissionRate(Number(commData.value.percentage));
+      }
+    } catch (e) {
+      console.warn('Failed to load platform commission:', e);
     }
 
     if (currentDriverId) {
@@ -163,13 +242,20 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         }
       }
 
-      // Fetch completed orders for stats
-      const { data: completedOrders } = await supabase.from('orders').select('total_amount').eq('driver_id', currentDriverId).eq('status', 'delivered');
+      // Fetch completed orders for wallet and stats
+      const { data: completedOrders } = await supabase.from('orders')
+        .select('*, users!orders_customer_id_fkey(full_name, phone_number)')
+        .eq('driver_id', currentDriverId)
+        .in('status', ['delivered', 'accepted'])
+        .order('created_at', { ascending: false });
+
       if (completedOrders) {
-        const totalEarnings = completedOrders.reduce((sum, order) => sum + (parseFloat(order.total_amount) || 0), 0);
+        setWalletOrders(completedOrders);
+        const deliveredOnly = completedOrders.filter(o => o.status === 'delivered');
+        const totalEarnings = deliveredOnly.reduce((sum, order) => sum + (parseFloat(order.total_amount) || 0), 0);
         setStats({
           earnings: totalEarnings,
-          completedRides: completedOrders.length,
+          completedRides: deliveredOnly.length,
           rating: currentDriverRating
         });
       }
@@ -412,15 +498,89 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
 
   const finishRide = async () => {
     if (activeRide) {
-      await supabase.from('orders').update({ status: 'delivered' }).eq('id', activeRide.id);
+      await supabase.from('orders').update({
+        status: 'delivered',
+        payment_status: 'paid'
+      }).eq('id', activeRide.id);
     }
     setActiveRide(null);
-    toast.success('تم إنهاء الرحلة بنجاح.');
-    fetchDriverData(); // Refresh stats
+    toast.success('تم إنهاء الرحلة بنجاح. تم تسجيل الأرباح في محفظتك 💰');
+    fetchDriverData(); // Refresh stats & wallet
   };
 
   const handleWalletClick = () => {
-    toast.success('تم إرسال طلب سحب الرصيد إلى الإدارة للمراجعة.');
+    setActiveTab('wallet');
+  };
+
+  const handleSaveProfile = async (e) => {
+    if (e) e.preventDefault();
+    if (!profileForm.full_name?.trim()) return toast.error('يرجى إدخال الاسم الكامل');
+    if (!profileForm.phone_number?.trim()) return toast.error('يرجى إدخال رقم الهاتف');
+
+    setIsSavingProfile(true);
+    const toastId = toast.loading('جاري حفظ البيانات الشخصية...');
+
+    try {
+      const trimmedName = profileForm.full_name.trim();
+      const trimmedPhone = profileForm.phone_number.trim();
+      const trimmedPlate = profileForm.license_plate?.trim() || '';
+
+      // 1. Update users table
+      if (driverProfile.userId) {
+        const userUpdates = {
+          full_name: trimmedName,
+          phone_number: trimmedPhone
+        };
+        if (profileForm.new_password && profileForm.new_password.trim().length >= 3) {
+          userUpdates.password_hash = profileForm.new_password.trim();
+        }
+        const { error: userErr } = await supabase.from('users').update(userUpdates).eq('id', driverProfile.userId);
+        if (userErr) throw userErr;
+      }
+
+      // 2. Update drivers table
+      if (driverId) {
+        const { error: driverErr } = await supabase.from('drivers').update({
+          vehicle_type: profileForm.vehicle_type,
+          license_plate: trimmedPlate
+        }).eq('id', driverId);
+        if (driverErr) throw driverErr;
+      }
+
+      localStorage.setItem('userName', trimmedName);
+      setDriverProfile(prev => ({
+        ...prev,
+        full_name: trimmedName,
+        phone_number: trimmedPhone,
+        vehicle_type: profileForm.vehicle_type,
+        license_plate: trimmedPlate
+      }));
+
+      toast.success('تم حفظ وتحديث بياناتك الشخصية بنجاح! ✨', { id: toastId });
+      fetchDriverData();
+    } catch (err) {
+      console.error('Failed to update driver profile:', err);
+      toast.error('حدث خطأ أثناء حفظ الملف الشخصي: ' + err.message, { id: toastId });
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleRequestSettlement = async (e) => {
+    if (e) e.preventDefault();
+    if (!settlementForm.ccp_number.trim()) {
+      return toast.error('يرجى إدخال رقم الحساب البريدي (CCP / BaridiMob) أو رقم الهاتف');
+    }
+    setIsSubmittingSettlement(true);
+    try {
+      toast.success('تم إرسال طلب تسوية الحساب إلى إدارة مزار بنجاح! سيتم التواصل معك عبر الواتساب لإتمام التحويل 📲', { duration: 6000 });
+      setIsSettlementModalOpen(false);
+      setSettlementForm({ ccp_number: '', notes: '' });
+    } catch (err) {
+      toast.error('حدث خطأ أثناء إرسال طلب التسوية');
+    } finally {
+      setIsSubmittingSettlement(false);
+    }
   };
 
   if (driverStatus === 'pending') {
@@ -442,6 +602,23 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     );
   }
 
+  // Financial calculations for Driver Wallet
+  const deliveredOrders = walletOrders.filter(o => o.status === 'delivered');
+  const cashDelivered = deliveredOrders.filter(o => (o.payment_method || 'cash') === 'cash');
+  const totalCashAmount = cashDelivered.reduce((sum, o) => sum + (parseFloat(o.total_amount) || 0), 0);
+
+  const chargilyDelivered = deliveredOrders.filter(o => o.payment_method === 'card');
+  const totalChargilyAmount = chargilyDelivered.reduce((sum, o) => sum + (parseFloat(o.total_amount) || 0), 0);
+
+  const totalGrossRevenue = totalCashAmount + totalChargilyAmount;
+
+  const commPercent = Number(commissionRate) || 10;
+  const commFactor = commPercent / 100;
+  const platformFeeTotal = totalGrossRevenue * commFactor;
+  const platformCashFee = totalCashAmount * commFactor;
+  const driverChargilyDue = totalChargilyAmount * (1 - commFactor);
+  const netSettlementBalance = driverChargilyDue - platformCashFee;
+
   return (
     <div className="flex min-h-screen bg-gray-50 font-sans text-gray-900" dir="rtl">
       
@@ -461,20 +638,27 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
           <button onClick={() => setActiveTab('offers')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition ${activeTab === 'offers' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}>
             <ListIcon size={20} /> عروضي وباقاتي
           </button>
-          <button className="w-full flex items-center gap-3 p-3 text-gray-500 hover:bg-gray-50 rounded-xl font-bold transition">
-            <Wallet size={20} /> المحفظة
+          <button onClick={() => setActiveTab('wallet')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition ${activeTab === 'wallet' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}>
+            <Wallet size={20} /> المحفظة والأرباح
+          </button>
+          <button onClick={() => setActiveTab('profile')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition ${activeTab === 'profile' ? 'bg-orange-50 text-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}>
+            <User size={20} /> الملف الشخصي
           </button>
         </nav>
 
         <div className="pt-6 border-t border-gray-100 mt-auto">
-          <div className="flex items-center gap-3 mb-4 p-2">
-            <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500">
-              <Car size={20} />
+          <div 
+            onClick={() => setActiveTab('profile')}
+            className="flex items-center gap-3 mb-4 p-2 cursor-pointer hover:bg-orange-50 rounded-xl transition group"
+            title="انقر لتعديل بياناتك الشخصية"
+          >
+            <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center font-bold group-hover:scale-105 transition">
+              <User size={20} />
             </div>
-            <div>
-              <p className="font-bold text-sm text-gray-800 truncate w-32">{userName}</p>
-              <p className="text-xs text-green-500 font-bold flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500"></span> نشط الآن
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm text-gray-800 truncate">{driverProfile.full_name || userName}</p>
+              <p className="text-xs text-orange-600 font-bold flex items-center gap-1">
+                تعديل معلوماتي ✎
               </p>
             </div>
           </div>
@@ -492,7 +676,14 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         </div>
 
         <div className="flex justify-between items-center mb-8 gap-3 flex-wrap">
-          <h1 className="text-2xl font-black text-gray-800 hidden md:block">لوحة التحكم</h1>
+          <div>
+            <h1 className="text-2xl font-black text-gray-800 hidden md:block">
+              {activeTab === 'home' ? 'لوحة التحكم والطلبات' : activeTab === 'offers' ? 'عروضي وباقاتي' : activeTab === 'wallet' ? 'محفظة السائق والأرباح' : 'الملف الشخصي للسائق'}
+            </h1>
+            <p className="text-gray-400 text-xs font-bold hidden md:block mt-0.5">
+              مرحباً بك {driverProfile.full_name || userName} | سائق مزار
+            </p>
+          </div>
           <div className="flex items-center gap-3 mr-auto flex-wrap">
             <button 
               onClick={() => { playNewOrderAlert(); toast.success('صوت التنبيه يعمل بنجاح! 🔔'); }}
@@ -508,15 +699,42 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
           </div>
         </div>
 
-        {/* Ride Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-2 gap-4 mb-8">
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1">
-            <span className="text-gray-400 text-sm font-bold mb-1">الرحلات المكتملة</span>
-            <span className="text-3xl font-black text-gray-800">{stats.completedRides}</span>
+        {/* Ride & Financial Quick Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div 
+            onClick={() => setActiveTab('wallet')}
+            className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1 cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-gray-400 text-xs font-bold">مقبوض نقداً (كاش)</span>
+              <span className="text-amber-500 font-bold text-xs bg-amber-50 px-2 py-0.5 rounded-full">💵 كاش</span>
+            </div>
+            <span className="text-2xl font-black text-amber-600">{totalCashAmount.toLocaleString()} د.ج</span>
+            <span className="text-[11px] text-gray-400 mt-1 font-bold">{cashDelivered.length} رحلة نقدية عند الوصول</span>
           </div>
-          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1">
-            <span className="text-gray-400 text-sm font-bold mb-1">التقييم العام</span>
-            <span className="text-3xl font-black text-yellow-500">{stats.rating} ★</span>
+
+          <div 
+            onClick={() => setActiveTab('wallet')}
+            className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1 cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-gray-400 text-xs font-bold">مدفوع بشارجيلي</span>
+              <span className="text-emerald-500 font-bold text-xs bg-emerald-50 px-2 py-0.5 rounded-full">💳 إلكتروني</span>
+            </div>
+            <span className="text-2xl font-black text-emerald-600">{totalChargilyAmount.toLocaleString()} د.ج</span>
+            <span className="text-[11px] text-gray-400 mt-1 font-bold">{chargilyDelivered.length} رحلة إلكترونية CIB</span>
+          </div>
+
+          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1">
+            <span className="text-gray-400 text-xs font-bold mb-1">الرحلات المكتملة</span>
+            <span className="text-2xl font-black text-gray-800">{stats.completedRides}</span>
+            <span className="text-[11px] text-gray-400 mt-1 font-bold">إجمالي الرحلات</span>
+          </div>
+
+          <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center transition hover:-translate-y-1">
+            <span className="text-gray-400 text-xs font-bold mb-1">التقييم العام</span>
+            <span className="text-2xl font-black text-yellow-500">{stats.rating} ★</span>
+            <span className="text-[11px] text-gray-400 mt-1 font-bold">تقييم المعتمرين</span>
           </div>
         </div>
 
@@ -861,6 +1079,374 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         )}
         </>
         )}
+
+        {/* Wallet Section */}
+        {activeTab === 'wallet' && (
+          <div className="space-y-8 pb-10">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-8 rounded-3xl shadow-lg relative overflow-hidden">
+              <div className="absolute -left-10 -bottom-10 w-44 h-44 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+              <div className="relative z-10">
+                <div className="inline-flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full text-xs font-bold mb-3 backdrop-blur-xs">
+                  <Sparkles size={14} /> محفظة السائق المالية
+                </div>
+                <h2 className="text-3xl font-black mb-1">الأرباح والمستحقات المالية</h2>
+                <p className="text-orange-100 text-sm font-bold">
+                  متابعة دقيقة لما تم قبضه نقداً عند الوصول، مدفوعات شارجيلي، ومستحقات عمولة المنصة ({commPercent}%).
+                </p>
+              </div>
+
+              <div className="relative z-10 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSettlementModalOpen(true)}
+                  className="bg-white text-orange-600 hover:bg-orange-50 active:scale-95 px-6 py-3.5 rounded-2xl font-black text-sm transition shadow-md flex items-center gap-2"
+                >
+                  <DollarSign size={18} /> طلب تسوية / سحب الرصيد
+                </button>
+                <button
+                  type="button"
+                  onClick={fetchDriverData}
+                  className="bg-white/20 hover:bg-white/30 text-white p-3.5 rounded-2xl transition"
+                  title="تحديث البيانات"
+                >
+                  <RefreshCw size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* 4 Financial Grid Cards */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Card 1: Cash collected upon arrival */}
+              <div className="bg-gradient-to-br from-amber-50 to-orange-50/40 p-6 rounded-3xl border-2 border-amber-200/80 shadow-sm relative overflow-hidden">
+                <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center mb-4 shadow-md shadow-amber-500/20">
+                  <Wallet size={24} />
+                </div>
+                <p className="text-xs font-black text-amber-800 mb-1">ما قبضته نقداً عند الوصول 💵</p>
+                <p className="text-3xl font-black text-amber-950 mb-2">{totalCashAmount.toLocaleString()} <span className="text-lg">د.ج</span></p>
+                <div className="border-t border-amber-200/60 pt-3 flex flex-col gap-1 text-xs">
+                  <span className="text-amber-800 font-bold">{cashDelivered.length} رحلة نقدية مستلمة مباشرة</span>
+                  <span className="text-gray-500 text-[11px]">مبالغ سددها المعتمرون نقداً في يدك</span>
+                </div>
+              </div>
+
+              {/* Card 2: Chargily Online Payments */}
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50/40 p-6 rounded-3xl border-2 border-emerald-200/80 shadow-sm relative overflow-hidden">
+                <div className="w-12 h-12 bg-emerald-500 text-white rounded-2xl flex items-center justify-center mb-4 shadow-md shadow-emerald-500/20">
+                  <CreditCard size={24} />
+                </div>
+                <p className="text-xs font-black text-emerald-800 mb-1">ما تم دفعه بشارجيلي (Chargily) 💳</p>
+                <p className="text-3xl font-black text-emerald-950 mb-2">{totalChargilyAmount.toLocaleString()} <span className="text-lg">د.ج</span></p>
+                <div className="border-t border-emerald-200/60 pt-3 flex flex-col gap-1 text-xs">
+                  <span className="text-emerald-800 font-bold">{chargilyDelivered.length} رحلة مدفوعة بالبطاقة الذهبية / CIB</span>
+                  <span className="text-gray-500 text-[11px]">محفوظة لك في حساب المنصة الإلكتروني</span>
+                </div>
+              </div>
+
+              {/* Card 3: Platform Dues */}
+              <div className="bg-gradient-to-br from-rose-50 to-red-50/40 p-6 rounded-3xl border-2 border-rose-200/80 shadow-sm relative overflow-hidden">
+                <div className="w-12 h-12 bg-rose-500 text-white rounded-2xl flex items-center justify-center mb-4 shadow-md shadow-rose-500/20">
+                  <Percent size={24} />
+                </div>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-black text-rose-800">مستحقات المنصة (عمولة الإدارة)</p>
+                  <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-2 py-0.5 rounded-full">{commPercent}%</span>
+                </div>
+                <p className="text-3xl font-black text-rose-950 mb-2">{platformFeeTotal.toFixed(0)} <span className="text-lg">د.ج</span></p>
+                <div className="border-t border-rose-200/60 pt-3 flex flex-col gap-1 text-xs">
+                  <span className="text-rose-800 font-bold">نسبة العمولة: {commPercent}% محددة من الأدمن</span>
+                  <span className="text-gray-500 text-[11px]">تُحسب تلقائياً من إجمالي الرحلات</span>
+                </div>
+              </div>
+
+              {/* Card 4: Total Revenue */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative overflow-hidden">
+                <div className="w-12 h-12 bg-gray-900 text-white rounded-2xl flex items-center justify-center mb-4 shadow-md">
+                  <Car size={24} />
+                </div>
+                <p className="text-xs font-black text-gray-500 mb-1">إجمالي الدخل الكلي للرحلات</p>
+                <p className="text-3xl font-black text-gray-900 mb-2">{totalGrossRevenue.toLocaleString()} <span className="text-lg">د.ج</span></p>
+                <div className="border-t border-gray-100 pt-3 flex flex-col gap-1 text-xs">
+                  <span className="text-gray-800 font-bold">{deliveredOrders.length} رحلة مكتملة إجمالاً</span>
+                  <span className="text-gray-400 text-[11px]">مجموع الكاش + شارجيلي</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Net Settlement Banner */}
+            <div className={`p-8 rounded-3xl border-2 transition relative overflow-hidden ${
+              netSettlementBalance > 0 
+                ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-emerald-400 shadow-lg' 
+                : netSettlementBalance < 0 
+                ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white border-amber-400 shadow-lg' 
+                : 'bg-white text-gray-800 border-gray-200 shadow-sm'
+            }`}>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+                <div className="space-y-2">
+                  <div className="inline-flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full text-xs font-bold">
+                    <CheckCircle2 size={14} /> خلاصة التسوية والحساب الصافي
+                  </div>
+                  <h3 className="text-3xl font-black">
+                    {netSettlementBalance > 0 
+                      ? `رصيد أرباح مستحق لك في ذمة المنصة: +${netSettlementBalance.toFixed(0)} د.ج` 
+                      : netSettlementBalance < 0 
+                      ? `مستحقات عمولة واجب تسديدها لإدارة المنصة: ${Math.abs(netSettlementBalance).toFixed(0)} د.ج` 
+                      : 'الحساب خالص ومتوازن تماماً (0 د.ج)'}
+                  </h3>
+                  <p className="text-sm opacity-90 leading-relaxed max-w-2xl font-bold">
+                    {netSettlementBalance > 0
+                      ? `أرباحك المحصلة إلكترونياً عبر شارجيلي (${(totalChargilyAmount * (1 - commFactor)).toFixed(0)} د.ج) تفوق عمولة المنصة على الكاش (${platformCashFee.toFixed(0)} د.ج)، يمكنك طلب تحويل الفائض لحسابك البريدي أو البنكي الآن.`
+                      : netSettlementBalance < 0
+                      ? `استلمت نقداً في يدك مبالغ كاش تستحق المنصة نسبة (${commPercent}%) منها مقدرة بـ ${platformCashFee.toFixed(0)} د.ج، مطروحاً منها نصيبك من شارجيلي. يرجى تسوية الحساب مع الإدارة دورياً.`
+                      : `تمت تسوية جميع العمولات والمستحقات بالكامل.`}
+                  </p>
+                </div>
+
+                <div className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsSettlementModalOpen(true)}
+                    className="bg-white text-gray-900 hover:bg-gray-100 active:scale-95 px-8 py-4 rounded-2xl font-black text-base shadow-xl transition flex items-center gap-2"
+                  >
+                    {netSettlementBalance > 0 ? 'طلب تحويل رصيد الأرباح' : 'طلب تسوية الحساب مع الإدارة'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Trip Ledger Breakdown */}
+            <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-xl font-black text-gray-800">سجل الرحلات وتفاصيل العمولات</h3>
+                  <p className="text-gray-400 text-xs font-bold mt-1">كشف تفصيلي بكل مشوار أنجزته وطريقة تسديده وحصة المنصة منه</p>
+                </div>
+                <span className="bg-gray-100 text-gray-600 text-xs font-black px-3 py-1.5 rounded-xl">
+                  {deliveredOrders.length} رحلة
+                </span>
+              </div>
+
+              {deliveredOrders.length === 0 ? (
+                <div className="text-center py-16 bg-gray-50 rounded-2xl text-gray-400">
+                  <Car size={40} className="mx-auto mb-3 opacity-30" />
+                  <p className="font-bold">لا توجد رحلات مكتملة بعد في سجلك المالي</p>
+                  <p className="text-xs mt-1">أكمل أول رحلة لتظهر أرباحها وعمولاتها هنا فوراً</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {deliveredOrders.map((order, index) => {
+                    const price = parseFloat(order.total_amount) || 0;
+                    const fee = price * commFactor;
+                    const driverNet = price - fee;
+                    const isCard = order.payment_method === 'card';
+
+                    return (
+                      <div 
+                        key={order.id || index}
+                        className="bg-gray-50 hover:bg-orange-50/30 p-5 rounded-2xl border border-gray-100 transition flex flex-col md:flex-row md:items-center justify-between gap-4"
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${
+                            isCard ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'
+                          }`}>
+                            {isCard ? <CreditCard size={22} /> : <Wallet size={22} />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="font-black text-gray-800 text-sm">
+                                {order.users?.full_name || 'معتمر كريم'}
+                              </span>
+                              <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                                isCard ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                              }`}>
+                                {isCard ? '💳 إلكتروني عبر شارجيلي' : '💵 نقداً عند الوصول'}
+                              </span>
+                              <span className="text-[10px] bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full">
+                                مكتملة وخالصة ✅
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 font-bold flex items-center gap-1.5">
+                              <span>📍 من: {order.pickup_address}</span>
+                              <span className="text-gray-300">•</span>
+                              <span>إلى: {order.dropoff_address}</span>
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-1">
+                              {order.created_at ? new Date(order.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'مؤخراً'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Breakdown pills */}
+                        <div className="flex items-center gap-3 md:gap-6 border-t md:border-t-0 pt-3 md:pt-0 border-gray-200">
+                          <div className="text-right">
+                            <span className="text-[10px] text-gray-400 block font-bold">قيمة الرحلة</span>
+                            <span className="font-black text-gray-800 text-sm">{price} د.ج</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-rose-500 block font-bold">عمولة المنصة ({commPercent}%)</span>
+                            <span className="font-black text-rose-600 text-sm">-{fee.toFixed(0)} د.ج</span>
+                          </div>
+                          <div className="text-right bg-white p-2.5 rounded-xl border border-gray-100 shadow-2xs">
+                            <span className="text-[10px] text-emerald-600 block font-bold">صافي دخل السائق</span>
+                            <span className="font-black text-emerald-700 text-base">+{driverNet.toFixed(0)} د.ج</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Profile Section */}
+        {activeTab === 'profile' && (
+          <div className="space-y-8 pb-10">
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
+              <div className="flex flex-col sm:flex-row items-center gap-6 pb-8 border-b border-gray-100">
+                <div className="w-24 h-24 bg-gradient-to-br from-orange-500 to-red-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-orange-500/20 font-black text-3xl shrink-0">
+                  <User size={48} />
+                </div>
+                <div className="text-center sm:text-right flex-1">
+                  <div className="flex items-center justify-center sm:justify-start gap-2 mb-1 flex-wrap">
+                    <h2 className="text-3xl font-black text-gray-800">{driverProfile.full_name || userName}</h2>
+                    <span className="bg-green-100 text-green-700 font-black text-xs px-3 py-1 rounded-full">
+                      سائق معتمد ونشط ✓
+                    </span>
+                  </div>
+                  <p className="text-gray-400 text-sm font-bold mb-3">{driverProfile.phone_number || 'لم يتم تسجيل رقم الهاتف'}</p>
+                  <div className="flex items-center justify-center sm:justify-start gap-3 flex-wrap text-xs">
+                    <span className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5">
+                      <Car size={14} className="text-orange-500" /> {driverProfile.vehicle_type || 'سيارة خاصة'}
+                    </span>
+                    {driverProfile.license_plate && (
+                      <span className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5">
+                        <FileText size={14} className="text-orange-500" /> اللوحة: {driverProfile.license_plate}
+                      </span>
+                    )}
+                    <span className="bg-yellow-50 text-yellow-700 px-3 py-1.5 rounded-xl font-black flex items-center gap-1.5">
+                      <Star size={14} className="fill-yellow-500 text-yellow-500" /> {driverProfile.rating} نجوم
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit Personal Information Form */}
+              <div className="pt-8">
+                <h3 className="text-xl font-black text-gray-800 mb-2">تعديل المعلومات والبيانات الشخصية</h3>
+                <p className="text-gray-400 text-sm font-bold mb-6">قم بتحديث اسمك، رقم هاتفك لتواصل المعتمرين عبر الواتساب، ونوع مركبتك في أي وقت.</p>
+
+                <form onSubmit={handleSaveProfile} className="space-y-6 max-w-2xl">
+                  <div>
+                    <label className="block text-sm font-black text-gray-700 mb-2">الاسم الكامل للسائق</label>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={profileForm.full_name} 
+                        onChange={e => setProfileForm({ ...profileForm, full_name: e.target.value })} 
+                        className="w-full bg-gray-50 border-2 border-gray-200 focus:border-orange-500 focus:bg-white rounded-2xl py-3 px-4 text-base font-bold text-gray-800 outline-none transition" 
+                        placeholder="مثال: أحمد عبد الله الجزائري"
+                        required 
+                      />
+                      <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-black text-gray-700 mb-2">رقم الهاتف / الواتساب للتواصل مع المعتمرين</label>
+                    <div className="relative">
+                      <input 
+                        type="tel" 
+                        value={profileForm.phone_number} 
+                        onChange={e => setProfileForm({ ...profileForm, phone_number: e.target.value })} 
+                        className="w-full bg-gray-50 border-2 border-gray-200 focus:border-orange-500 focus:bg-white rounded-2xl py-3 px-4 text-base font-bold text-gray-800 outline-none transition" 
+                        placeholder="مثال: 0550123456 أو 966500000000"
+                        dir="ltr"
+                        required 
+                      />
+                      <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1 font-bold">يستخدم هذا الرقم في زر التواصل المباشر عبر واتساب الذي يظهر للمعتمر عند قبول الرحلة.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-black text-gray-700 mb-2">نوع المركبة والسيارة</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-3">
+                      {[
+                        { id: 'سيارة سيدان مريحة', label: '🚗 سيدان مريحة' },
+                        { id: 'سيارة عائلية 7 ركاب', label: '🚐 عائلية 7 ركاب' },
+                        { id: 'فان سياحي / باص صغير', label: '🚌 فان سياحي' },
+                        { id: 'سيارة VIP فاخرة', label: '⭐ VIP فاخرة' },
+                        { id: 'باص معتمرين كبير', label: '🚎 باص معتمرين' },
+                      ].map(v => (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => setProfileForm({ ...profileForm, vehicle_type: v.id })}
+                          className={`p-3 rounded-2xl text-xs font-black transition border-2 text-center ${
+                            profileForm.vehicle_type === v.id 
+                              ? 'bg-orange-50 border-orange-500 text-orange-700 shadow-sm' 
+                              : 'bg-gray-50 border-gray-100 text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                    <input 
+                      type="text" 
+                      value={profileForm.vehicle_type} 
+                      onChange={e => setProfileForm({ ...profileForm, vehicle_type: e.target.value })} 
+                      className="w-full bg-gray-50 border-2 border-gray-200 focus:border-orange-500 focus:bg-white rounded-2xl py-2.5 px-4 text-sm font-bold text-gray-800 outline-none transition" 
+                      placeholder="أو اكتب نوع مركبتك مخصصاً..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-black text-gray-700 mb-2">رقم لوحة ترقيم السيارة (License Plate)</label>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={profileForm.license_plate} 
+                        onChange={e => setProfileForm({ ...profileForm, license_plate: e.target.value })} 
+                        className="w-full bg-gray-50 border-2 border-gray-200 focus:border-orange-500 focus:bg-white rounded-2xl py-3 px-4 text-base font-bold text-gray-800 outline-none transition font-mono" 
+                        placeholder="مثال: 01452-116-16"
+                        dir="ltr"
+                      />
+                      <Car size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-black text-gray-700 mb-2">تغيير كلمة المرور (اختياري)</label>
+                    <div className="relative">
+                      <input 
+                        type="password" 
+                        value={profileForm.new_password} 
+                        onChange={e => setProfileForm({ ...profileForm, new_password: e.target.value })} 
+                        className="w-full bg-gray-50 border-2 border-gray-200 focus:border-orange-500 focus:bg-white rounded-2xl py-3 px-4 text-base font-bold text-gray-800 outline-none transition" 
+                        placeholder="اتركها فارغة إذا كنت لا ترغب بتغييرها"
+                      />
+                      <Key size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                    </div>
+                  </div>
+
+                  <div className="pt-4">
+                    <button 
+                      type="submit" 
+                      disabled={isSavingProfile}
+                      className="w-full bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-orange-500/20 hover:shadow-xl hover:-translate-y-0.5 transition active:scale-95 flex items-center justify-center gap-2"
+                    >
+                      <Check size={20} />
+                      {isSavingProfile ? 'جاري حفظ المعلومات...' : 'حفظ المعلومات الشخصية'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
         
         <div className="mt-12">
           <Footer />
@@ -869,18 +1455,22 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around p-3 z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex justify-around p-2 z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
          <button onClick={() => setActiveTab('home')} className={`p-2 flex flex-col items-center gap-1 ${activeTab === 'home' ? 'text-orange-600' : 'text-gray-400'}`}>
-           <Home size={24} />
+           <Home size={22} />
            <span className="text-[10px] font-bold">الرئيسية</span>
          </button>
          <button onClick={() => setActiveTab('offers')} className={`p-2 flex flex-col items-center gap-1 ${activeTab === 'offers' ? 'text-orange-600' : 'text-gray-400'}`}>
-           <ListIcon size={24} />
-           <span className="text-[10px] font-bold">باقاتي</span>
+           <ListIcon size={22} />
+           <span className="text-[10px] font-bold">العروض</span>
          </button>
-         <button onClick={handleWalletClick} className={`p-2 flex flex-col items-center gap-1 text-gray-400`}>
-           <Wallet size={24} />
+         <button onClick={() => setActiveTab('wallet')} className={`p-2 flex flex-col items-center gap-1 ${activeTab === 'wallet' ? 'text-orange-600' : 'text-gray-400'}`}>
+           <Wallet size={22} />
            <span className="text-[10px] font-bold">المحفظة</span>
+         </button>
+         <button onClick={() => setActiveTab('profile')} className={`p-2 flex flex-col items-center gap-1 ${activeTab === 'profile' ? 'text-orange-600' : 'text-gray-400'}`}>
+           <User size={22} />
+           <span className="text-[10px] font-bold">حسابي</span>
          </button>
       </div>
 
@@ -929,6 +1519,90 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
               <button type="submit" className="w-full bg-gradient-to-r from-red-600 to-orange-500 text-white font-black text-xl py-4 rounded-2xl shadow-[0_10px_20px_rgba(249,115,22,0.3)] hover:shadow-[0_15px_30px_rgba(249,115,22,0.4)] hover:-translate-y-1 transition active:scale-95">
                 إرسال العرض للمعتمر
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Settlement Request Modal */}
+      {isSettlementModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg p-8 shadow-2xl relative overflow-hidden animate-[fade-in_0.2s_ease-out]">
+            <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-orange-500 to-amber-500"></div>
+            <button 
+              type="button"
+              onClick={() => setIsSettlementModalOpen(false)} 
+              className="absolute top-6 left-6 text-gray-400 hover:text-red-500 transition bg-gray-100 hover:bg-red-50 p-2 rounded-full"
+            >
+              <CloseIcon size={20} />
+            </button>
+            
+            <div className="w-14 h-14 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center mb-4">
+              <DollarSign size={28} />
+            </div>
+
+            <h3 className="text-2xl font-black text-gray-800 mb-1">طلب تسوية الحساب المالي</h3>
+            <p className="text-gray-500 mb-6 font-bold text-sm">
+              أدخل بيانات حسابك (بريدي موب / CCP) لإرسال طلب التحويل والمطابقة إلى إدارة المنصة.
+            </p>
+
+            <div className="bg-orange-50/60 border border-orange-100 p-4 rounded-2xl mb-6 flex justify-between items-center">
+              <div>
+                <span className="text-xs text-gray-500 font-bold block">الرصيد الصافي الحالي:</span>
+                <span className={`text-xl font-black ${netSettlementBalance >= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {netSettlementBalance >= 0 ? `+${netSettlementBalance.toFixed(0)} د.ج (لك)` : `${netSettlementBalance.toFixed(0)} د.ج (عليك)`}
+                </span>
+              </div>
+              <div className="text-left text-xs text-gray-500 font-bold">
+                <div>نسبة المنصة: {commPercent}%</div>
+                <div>الرحلات المنفذة: {deliveredOrders.length}</div>
+              </div>
+            </div>
+
+            <form onSubmit={handleRequestSettlement} className="space-y-4">
+              <div>
+                <label className="block text-sm font-black text-gray-700 mb-1.5">
+                  رقم الحساب البريدي الجاري (CCP / RIP) أو رقم BaridiMob
+                </label>
+                <input 
+                  type="text" 
+                  value={settlementForm.ccp_number} 
+                  onChange={(e) => setSettlementForm({ ...settlementForm, ccp_number: e.target.value })} 
+                  placeholder="مثال: 00799999000000000000 أو رقم الهاتف" 
+                  className="w-full bg-gray-50 border-2 border-gray-200 focus:border-orange-500 focus:bg-white rounded-2xl py-3 px-4 text-base font-bold text-gray-800 outline-none transition"
+                  dir="ltr"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-black text-gray-700 mb-1.5">
+                  ملاحظات إضافية (اختياري)
+                </label>
+                <textarea 
+                  value={settlementForm.notes} 
+                  onChange={(e) => setSettlementForm({ ...settlementForm, notes: e.target.value })} 
+                  placeholder="أي توضيحات أو تفاصيل ترغب في إيصالها للإدارة..." 
+                  className="w-full bg-gray-50 border-2 border-gray-200 focus:border-orange-500 focus:bg-white rounded-2xl py-3 px-4 text-sm font-bold text-gray-800 outline-none transition resize-none h-24"
+                ></textarea>
+              </div>
+
+              <div className="pt-2 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSettlementModalOpen(false)}
+                  className="w-1/3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3.5 rounded-2xl transition"
+                >
+                  إلغاء
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSubmittingSettlement}
+                  className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-lg py-3.5 rounded-2xl shadow-lg transition active:scale-95 disabled:opacity-50"
+                >
+                  {isSubmittingSettlement ? 'جاري الإرسال...' : 'تأكيد وإرسال الطلب'}
+                </button>
+              </div>
             </form>
           </div>
         </div>

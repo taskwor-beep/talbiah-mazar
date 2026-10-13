@@ -56,10 +56,10 @@ serve(async (req) => {
        }
 
        if (bookingId) {
-         // Update the order status to accepted so the driver gets notified
+         // Update the order status to accepted and mark as paid with card
          const { error } = await supabase
            .from('orders')
-           .update({ status: 'accepted', payment_status: 'paid' }) 
+           .update({ status: 'accepted', payment_status: 'paid', payment_method: 'card' }) 
            .eq('id', bookingId);
            
          if (error) {

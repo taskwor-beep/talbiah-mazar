@@ -51,8 +51,14 @@ export default function App() {
   }, [isLoggedIn, currentView, userName, userRole]);
 
   React.useEffect(() => {
-    if (window.location.search.includes('admin') && !isLoggedIn) {
+    const search = window.location.search;
+    if (search.includes('admin') && !isLoggedIn) {
       openAuthModal('admin_login');
+    } else if (search.includes('payment_status')) {
+      // Returning from Chargily payment gateway
+      setIsLoggedIn(true);
+      setCurrentView('dashboard');
+      setUserRole('pilgrim');
     }
   }, [isLoggedIn]);
 

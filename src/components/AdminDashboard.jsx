@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Settings, List as ListIcon, Check, X, Megaphone, Smartphone, Star, Search, Shield, Save, Package } from 'lucide-react';
+import { Users, UserPlus, Settings, List as ListIcon, Check, X, Megaphone, Smartphone, Star, Search, Shield, Save, Package, Percent, DollarSign, Wallet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
@@ -13,6 +13,7 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
   
   const [settings, setSettings] = useState({
     exchange_rate: { sar_to_dzd: 35 },
+    platform_commission: { percentage: 10 },
     social_popup: { is_active: false, title: "تابعنا على المنصات الاجتماعية!", description: "اشترك الآن ليصلك كل جديد عن عروض مزار.", link: "https://twitter.com", frequency: 'once', version: 1 },
     ad_popup: { is_active: true, title: "إعلان هام", description: "احجز باقتك الآن واحصل على خصم 10% بمناسبة الموسم!", image_url: "", frequency: 'always', version: 1 },
     whatsapp_notify: { is_active: false, api_key: "", phone: "", template: "طلب جديد من {customer_name}!\nالرحلة: من {pickup} إلى {dropoff}" }
@@ -380,6 +381,65 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
             </div>
 
             <div className="grid md:grid-cols-2 gap-8">
+              {/* Platform Commission Setting */}
+              <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group md:col-span-2">
+                <div className="absolute -left-10 -top-10 w-44 h-44 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full opacity-10 group-hover:scale-150 transition-transform duration-500"></div>
+                
+                <div className="flex justify-between items-start mb-4 relative z-10">
+                  <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20">
+                    <Percent size={32} />
+                  </div>
+                  <span className="bg-orange-100 text-orange-700 font-black text-sm px-4 py-2 rounded-xl">
+                    النسبة الحالية: {settings.platform_commission?.percentage || 10}%
+                  </span>
+                </div>
+                
+                <h3 className="text-2xl font-black text-slate-800 mb-2 relative z-10">نسبة عمولة المنصة من السائقين (Platform Commission)</h3>
+                <p className="text-slate-500 leading-relaxed relative z-10 mb-6">
+                  حدد النسبة المئوية المقتطعة كعمولة للمنصة من إجمالي رحلات السائقين (سواء المقبوضة نقداً عند الوصول أو المدفوعة إلكترونياً عبر شارجيلي). يتم احتساب هذه النسبة وتطبيقها فورياً على محافظ السائقين.
+                </p>
+
+                <div className="grid sm:grid-cols-3 gap-6 items-end relative z-10">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-gray-500 mb-2">النسبة المئوية للعمولة (%)</label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        min="0" 
+                        max="100" 
+                        step="1"
+                        value={settings.platform_commission?.percentage ?? 10} 
+                        onChange={e => handleSettingChange('platform_commission', 'percentage', Number(e.target.value))} 
+                        className="w-full bg-slate-50 border-2 border-gray-200 rounded-xl px-4 py-3 text-2xl font-black text-gray-800 outline-none focus:border-orange-500 pr-12 transition"
+                        placeholder="10"
+                      />
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-gray-400">%</span>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      {[5, 10, 15, 20].map(pct => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => handleSettingChange('platform_commission', 'percentage', pct)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black transition ${settings.platform_commission?.percentage === pct ? 'bg-orange-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <button 
+                      onClick={() => saveSettings('platform_commission')} 
+                      className="w-full bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 text-white font-black py-4 rounded-xl shadow-lg shadow-orange-500/20 hover:shadow-xl transition flex justify-center items-center gap-2"
+                    >
+                      <Save size={20} /> حفظ نسبة العمولة
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Social Popup Setting */}
               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group">
                 <div className="absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full opacity-10 group-hover:scale-150 transition-transform duration-500"></div>

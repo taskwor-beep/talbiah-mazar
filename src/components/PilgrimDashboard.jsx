@@ -59,28 +59,60 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
   useEffect(() => {
     setOneSignalRole('pilgrim', userName);
     requestNotificationPermission();
-    fetchData();
-    fetchPastTrips();
     fetchUserProfile();
 
     // Check if returning from Chargily checkout
     const urlParams = new URLSearchParams(window.location.search);
     const pStatus = urlParams.get('payment_status');
-    const orderIdParam = urlParams.get('order_id');
+    const orderIdParam = urlParams.get('order_id') || localStorage.getItem('mazar_pending_chargily_order_id') || localStorage.getItem('mazar_active_order_id');
+
     if (pStatus === 'success' && orderIdParam) {
-      toast.success('تم الدفع بنجاح عبر Chargily! السائق في طريقه إليك 🚗💳', { duration: 6000 });
-      supabase.from('orders').update({
-        status: 'accepted',
-        payment_method: 'card',
-        payment_status: 'paid'
-      }).eq('id', orderIdParam).then(() => {
-        window.history.replaceState({}, document.title, window.location.pathname);
-        fetchData();
-        fetchPastTrips();
-      });
+      // 1. Immediately switch UI state to prevent seeing the payment options again
+      setCurrentOrderId(orderIdParam);
+      setRideStatus('active');
+      localStorage.setItem('mazar_active_order_id', orderIdParam);
+      localStorage.removeItem('mazar_pending_chargily_order_id');
+      toast.success('تم الدفع بنجاح عبر Chargily! السائق في طريقه إليك 🚗💳', { duration: 7000 });
+
+      // 2. Update Supabase order and fetch confirmed order details directly
+      (async () => {
+        try {
+          const { error: updErr } = await supabase.from('orders').update({
+            status: 'accepted',
+            payment_method: 'card',
+            payment_status: 'paid'
+          }).eq('id', orderIdParam);
+          if (updErr) console.warn('Order status update warning:', updErr);
+
+          // Direct fetch of the confirmed order
+          const { data: updatedOrder } = await supabase.from('orders')
+            .select('*, drivers(users(full_name, phone_number))')
+            .eq('id', orderIdParam)
+            .maybeSingle();
+
+          if (updatedOrder) {
+            setCurrentOrderId(updatedOrder.id);
+            setOfferedRide(updatedOrder);
+            setPickup(updatedOrder.pickup_address);
+            setDropoff(updatedOrder.dropoff_address);
+            setRideStatus('active');
+          }
+        } catch (e) {
+          console.error('Error confirming payment redirect:', e);
+        } finally {
+          window.history.replaceState({}, document.title, window.location.pathname);
+          fetchData(orderIdParam);
+          fetchPastTrips();
+        }
+      })();
     } else if (pStatus === 'failed') {
       toast.error('لم تكتمل عملية الدفع الإلكتروني. يمكنك المحاولة مجدداً أو اختيار الدفع نقداً.');
       window.history.replaceState({}, document.title, window.location.pathname);
+      fetchData();
+      fetchPastTrips();
+    } else {
+      fetchData();
+      fetchPastTrips();
     }
   }, []);
 
@@ -248,7 +280,7 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
     }, 3000);
   };
 
-  const fetchData = async () => {
+  const fetchData = async (forcedOrderId = null) => {
     // Fetch approved packages with their nested steps and driver details
     const { data, error } = await supabase
       .from('driver_packages')
@@ -287,35 +319,54 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
       setAvailableOffers(offersData);
     }
 
-    // Restore active order if user refreshed the page
-    const { data: userData } = await supabase.from('users').select('id').eq('full_name', userName).limit(1).maybeSingle();
-    if (userData) {
-      const { data: activeOrder } = await supabase.from('orders')
+    // Restore active order
+    const targetOrderId = forcedOrderId || currentOrderId || localStorage.getItem('mazar_active_order_id');
+    let foundActiveOrder = null;
+
+    if (targetOrderId) {
+      const { data: directOrder } = await supabase.from('orders')
         .select('*, drivers(users(full_name, phone_number))')
-        .eq('customer_id', userData.id)
-        .in('status', ['pending', 'pending_driver_approval', 'driver_offered', 'accepted', 'picking_up', 'in_transit'])
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .eq('id', targetOrderId)
         .maybeSingle();
-        
-      if (activeOrder) {
-        setCurrentOrderId(activeOrder.id);
-        setPickup(activeOrder.pickup_address);
-        setDropoff(activeOrder.dropoff_address);
-        if (activeOrder.pickup_latitude && activeOrder.pickup_longitude) {
-          setLocationCoords({ lat: activeOrder.pickup_latitude, lng: activeOrder.pickup_longitude });
+      if (directOrder && ['pending', 'pending_driver_approval', 'driver_offered', 'accepted', 'picking_up', 'in_transit'].includes(directOrder.status)) {
+        foundActiveOrder = directOrder;
+      }
+    }
+
+    if (!foundActiveOrder) {
+      const currentName = userName || initialUserName;
+      if (currentName) {
+        const { data: userData } = await supabase.from('users').select('id').eq('full_name', currentName).limit(1).maybeSingle();
+        if (userData) {
+          const { data: activeOrder } = await supabase.from('orders')
+            .select('*, drivers(users(full_name, phone_number))')
+            .eq('customer_id', userData.id)
+            .in('status', ['pending', 'pending_driver_approval', 'driver_offered', 'accepted', 'picking_up', 'in_transit'])
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (activeOrder) foundActiveOrder = activeOrder;
         }
-        setCurrentOrderType(activeOrder.driver_id ? 'direct' : 'search');
-        
-        if (activeOrder.status === 'driver_offered') {
-          setRideStatus('driver_offered');
-          setOfferedRide(activeOrder);
-        } else if (['accepted', 'picking_up', 'in_transit'].includes(activeOrder.status)) {
-          setRideStatus('active');
-          setOfferedRide(activeOrder);
-        } else {
-          setRideStatus('requesting');
-        }
+      }
+    }
+
+    if (foundActiveOrder) {
+      setCurrentOrderId(foundActiveOrder.id);
+      localStorage.setItem('mazar_active_order_id', foundActiveOrder.id);
+      setPickup(foundActiveOrder.pickup_address);
+      setDropoff(foundActiveOrder.dropoff_address);
+      if (foundActiveOrder.pickup_latitude && foundActiveOrder.pickup_longitude) {
+        setLocationCoords({ lat: foundActiveOrder.pickup_latitude, lng: foundActiveOrder.pickup_longitude });
+      }
+      setCurrentOrderType(foundActiveOrder.driver_id ? 'direct' : 'search');
+      setOfferedRide(foundActiveOrder);
+      
+      if (['accepted', 'picking_up', 'in_transit'].includes(foundActiveOrder.status) || foundActiveOrder.payment_status === 'paid') {
+        setRideStatus('active');
+      } else if (foundActiveOrder.status === 'driver_offered') {
+        setRideStatus('driver_offered');
+      } else {
+        setRideStatus('requesting');
       }
     }
   };
@@ -524,6 +575,9 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
       }
 
       if (checkoutUrl) {
+        localStorage.setItem('mazar_active_order_id', currentOrderId);
+        localStorage.setItem('mazar_pending_chargily_order_id', currentOrderId);
+
         await supabase.from('orders').update({
           payment_method: 'card',
           payment_status: 'pending'
@@ -550,7 +604,11 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
       }).eq('id', currentOrderId);
 
       if (error) throw error;
+      localStorage.setItem('mazar_active_order_id', currentOrderId);
       setRideStatus('active');
+      if (offeredRide) {
+        setOfferedRide(prev => ({ ...prev, status: 'accepted', payment_method: 'cash' }));
+      }
       toast.success('تم تأكيد المشوار بنجاح! سيتم الدفع نقداً عند الوصول للسائق.', { id: 'cash-payment' });
     } catch (err) {
       toast.error('حدث خطأ: ' + err.message, { id: 'cash-payment' });
@@ -579,6 +637,8 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
     setRideStatus('idle');
     setOfferedRide(null);
     setCurrentOrderId(null);
+    localStorage.removeItem('mazar_active_order_id');
+    localStorage.removeItem('mazar_pending_chargily_order_id');
     toast.success('تم إلغاء الطلب بنجاح.');
   };
 
@@ -938,7 +998,7 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
                 </div>
               )}
 
-              {rideStatus === 'driver_offered' && offeredRide && (
+              {rideStatus === 'driver_offered' && offeredRide && offeredRide.payment_status !== 'paid' && offeredRide.status !== 'accepted' && (
                 <div className="bg-orange-50 p-8 rounded-3xl border border-orange-200 ring-4 ring-orange-50 relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
                   <h3 className="font-black text-xl mb-6 text-gray-800">
@@ -976,6 +1036,39 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
                     السائق في طريقه إليك
                   </h3>
 
+                  {/* Payment Status Alert Banner */}
+                  {(offeredRide?.payment_method === 'card' || offeredRide?.payment_status === 'paid') ? (
+                    <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 mb-6 shadow-sm flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-emerald-500 text-white rounded-xl flex items-center justify-center shadow-md shrink-0">
+                          <Check size={22} />
+                        </div>
+                        <div>
+                          <p className="font-black text-emerald-900 text-base">تم الدفع إلكترونياً بنجاح عبر Chargily 💳</p>
+                          <p className="text-emerald-700 text-xs font-bold mt-0.5">المبلغ مدفوع بالكامل بالبطاقة الذهبية / CIB - لا يُطلب منك دفع أي مبلغ نقدي للسائق عند الوصول.</p>
+                        </div>
+                      </div>
+                      <span className="bg-emerald-600 text-white text-xs font-black px-3 py-1.5 rounded-full shrink-0 shadow-sm">
+                        مدفوع بالكامل
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 mb-6 shadow-sm flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-amber-500 text-white rounded-xl flex items-center justify-center shadow-md shrink-0">
+                          <Wallet size={22} />
+                        </div>
+                        <div>
+                          <p className="font-black text-amber-900 text-base">طريقة الدفع: نقداً عند الوصول 💵</p>
+                          <p className="text-amber-700 text-xs font-bold mt-0.5">يرجى تسليم المبلغ ({offeredRide?.total_amount} د.ج) نقداً للسائق عند وصولك إلى الوجهة.</p>
+                        </div>
+                      </div>
+                      <span className="bg-amber-600 text-white text-xs font-black px-3 py-1.5 rounded-full shrink-0 shadow-sm">
+                        دفع كاش
+                      </span>
+                    </div>
+                  )}
+
                   {/* Interactive Live Route Map */}
                   <RideMap 
                     pickupAddress={pickup} 
@@ -995,7 +1088,7 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
                       <h3 className="font-black text-2xl text-gray-800 mb-1">السائق {offeredRide?.drivers?.users?.full_name || 'سائق مزار'}</h3>
                       <div className="text-sm font-bold text-gray-500 flex items-center justify-center sm:justify-start gap-2 mt-1">
                         <Wallet size={16} className="text-orange-500" />
-                        <span>{offeredRide?.payment_method === 'cash' ? 'طريقة الدفع: نقداً عند الوصول (يُرجى تسليم المبلغ للسائق)' : 'طريقة الدفع: إلكتروني (تم الدفع بالبطاقة الذهبية / CIB)'}</span>
+                        <span>{(offeredRide?.payment_method === 'card' || offeredRide?.payment_status === 'paid') ? 'الدفع: إلكتروني مكتمل ومؤكد' : 'الدفع: نقداً عند الوصول'}</span>
                       </div>
                     </div>
                     <div className="text-2xl font-black text-orange-600">
