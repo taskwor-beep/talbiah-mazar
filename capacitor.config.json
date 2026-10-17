@@ -1,0 +1,14 @@
+{
+  "appId": "com.mazar.app",
+  "appName": "مزار",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "plugins": {
+    "OneSignal": {
+      "appId": "a6871e60-16a7-424e-a111-f6a2ee2a5f78"
+    }
+  }
+}

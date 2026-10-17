@@ -26,3 +26,9 @@ dist-ssr
 *.sln
 *.sw?
 scratch/
+
+# Android & Gradle Build files
+android/.gradle/
+android/app/build/
+android/build/
+android/capacitor-cordova-android-plugins/build/

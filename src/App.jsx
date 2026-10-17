@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MapPin, Navigation, Car, ShieldCheck, Wallet, Search, Star, X, User, Facebook, Twitter, Instagram, Smartphone } from 'lucide-react';
+import { MapPin, Navigation, Car, ShieldCheck, Wallet, Search, Star, X, User, Facebook, Twitter, Instagram, Smartphone, Download, Wrench } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
 import { supabase } from './lib/supabase';
 import Footer from './components/Footer';
@@ -7,6 +7,9 @@ import PilgrimDashboard from './components/PilgrimDashboard';
 import DriverDashboard from './components/DriverDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import GlobalPopups from './components/GlobalPopups';
+import OEMBatteryModal from './components/OEMBatteryModal';
+import DeveloperDiagnosticsModal from './components/DeveloperDiagnosticsModal';
+import { loginOneSignal, logoutOneSignal } from './lib/onesignal';
 
 export default function App() {
   const [pickup, setPickup] = useState('');
@@ -19,7 +22,11 @@ export default function App() {
   const [currentView, setCurrentView] = useState(localStorage.getItem('currentView') || 'landing');
   const [userName, setUserName] = useState(localStorage.getItem('userName') || '');
   const [userRole, setUserRole] = useState(localStorage.getItem('userRole') || 'pilgrim');
+  const [userId, setUserId] = useState(localStorage.getItem('userId') || '');
+  const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail') || '');
   const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isOEMModalOpen, setIsOEMModalOpen] = useState(false);
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
 
   React.useEffect(() => {
     const handleBeforeInstall = (e) => {
@@ -48,7 +55,9 @@ export default function App() {
     localStorage.setItem('currentView', currentView);
     localStorage.setItem('userName', userName);
     localStorage.setItem('userRole', userRole);
-  }, [isLoggedIn, currentView, userName, userRole]);
+    if (userId) localStorage.setItem('userId', userId);
+    if (userEmail) localStorage.setItem('userEmail', userEmail);
+  }, [isLoggedIn, currentView, userName, userRole, userId, userEmail]);
 
   React.useEffect(() => {
     const search = window.location.search;
@@ -103,16 +112,26 @@ export default function App() {
            await supabase.from('drivers').insert([{ user_id: data.id, vehicle_type: vehicleSelect }]);
         }
         
+        setUserId(data.id);
         setUserName(data.full_name);
         setUserRole(data.role);
+        setUserEmail(data.email || '');
+        localStorage.setItem('userId', data.id);
+        localStorage.setItem('userEmail', data.email || '');
         setIsLoggedIn(true);
         setCurrentView('dashboard');
         closeAuthModal();
+
+        // Principle 4: OneSignal login with external_id (UUID)
+        loginOneSignal(data.id, data.role, data.full_name);
+
         toast.success('تم إنشاء الحساب بنجاح!', { id: toastId });
       } else if (authType === 'admin_login' && phoneInput === 'admin' && passwordInput === 'admin') {
-         // Mock admin login
+         // Mock admin login - authorized developer
          setUserName('المدير العام');
          setUserRole('admin');
+         setUserEmail('madaniameur26@gmail.com');
+         localStorage.setItem('userEmail', 'madaniameur26@gmail.com');
          setIsLoggedIn(true);
          setCurrentView('dashboard');
          closeAuthModal();
@@ -126,11 +145,19 @@ export default function App() {
            
          if (error || !data) throw new Error('رقم الهاتف أو كلمة المرور غير صحيحة');
          
+         setUserId(data.id);
          setUserName(data.full_name);
          setUserRole(data.role);
+         setUserEmail(data.email || '');
+         localStorage.setItem('userId', data.id);
+         localStorage.setItem('userEmail', data.email || '');
          setIsLoggedIn(true);
          setCurrentView('dashboard');
          closeAuthModal();
+
+         // Principle 4: OneSignal login with external_id (UUID)
+         loginOneSignal(data.id, data.role, data.full_name);
+
          toast.success('تم تسجيل الدخول بنجاح!', { id: toastId });
       }
     } catch (err) {
@@ -139,9 +166,15 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    // Principle 4: Clean OneSignal session
+    logoutOneSignal();
     setIsLoggedIn(false);
     setCurrentView('landing');
     setUserName('');
+    setUserId('');
+    setUserEmail('');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('userEmail');
     toast('تم تسجيل الخروج');
   };
 
@@ -150,15 +183,29 @@ export default function App() {
       <>
         <Toaster />
         <GlobalPopups userRole={userRole} />
+        <OEMBatteryModal isOpen={isOEMModalOpen} onClose={() => setIsOEMModalOpen(false)} />
+        <DeveloperDiagnosticsModal 
+          isOpen={isDiagnosticsOpen} 
+          onClose={() => setIsDiagnosticsOpen(false)} 
+          currentUserEmail={userEmail}
+          userId={userId}
+          userRole={userRole}
+        />
         {userRole === 'admin' ? (
           <AdminDashboard userName={userName || 'مدير النظام'} onLogout={handleLogout} onGoHome={() => setCurrentView('landing')} />
         ) : userRole === 'driver' ? (
-          <DriverDashboard userName={userName} onLogout={handleLogout} onGoHome={() => setCurrentView('landing')} />
+          <DriverDashboard 
+            userName={userName} 
+            onLogout={handleLogout} 
+            onGoHome={() => setCurrentView('landing')}
+            onOpenBatterySettings={() => setIsOEMModalOpen(true)}
+          />
         ) : (
           <PilgrimDashboard 
             userName={userName} 
             onLogout={handleLogout} 
             onGoHome={() => setCurrentView('landing')} 
+            onOpenBatterySettings={() => setIsOEMModalOpen(true)}
             onUpdateUserName={(newName) => {
               setUserName(newName);
               localStorage.setItem('userName', newName);
@@ -187,13 +234,21 @@ export default function App() {
             مزار
           </span>
         </div>
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <a 
+            href="/downloads/mazar.apk" 
+            download="mazar.apk"
+            className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-full font-bold text-xs sm:text-sm flex items-center gap-1.5 transition shadow-sm hover:shadow-md hover:-translate-y-0.5"
+            title="تحميل تطبيق الأندرويد المباشر APK"
+          >
+            <Download size={16} /> <span>تحميل APK</span>
+          </a>
           <button 
             onClick={handleInstallClick} 
             className="bg-white/80 hover:bg-white text-orange-600 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full font-bold text-xs sm:text-sm flex items-center gap-1.5 transition shadow-sm border border-orange-200"
             title="تثبيت التطبيق على الجوال"
           >
-            <Smartphone size={16} /> تثبيت التطبيق
+            <Smartphone size={16} /> تثبيت
           </button>
           {isLoggedIn ? (
             <div className="flex items-center gap-2 sm:gap-3 bg-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full shadow-sm border border-orange-100">
@@ -256,9 +311,29 @@ export default function App() {
               في <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-yellow-500">البقاع المقدسة</span>
             </h1>
             
-            <p className="text-xl text-gray-600 mb-10 leading-relaxed max-w-lg">
+            <p className="text-xl text-gray-600 mb-6 leading-relaxed max-w-lg">
               خدمة نقل آمنة وسريعة للحجاج والمعتمرين. نوصلك إلى المزارات التاريخية أو أي وجهة تختارها براحة تامة والدفع بالدينار الجزائري.
             </p>
+
+            {/* APK Direct Download & OEM Battery Optimizations */}
+            <div className="flex flex-wrap items-center gap-3 mb-8">
+              <a 
+                href="/downloads/mazar.apk" 
+                download="mazar.apk" 
+                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black px-5 py-3 rounded-2xl shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/35 hover:-translate-y-0.5 transition flex items-center gap-2 text-sm sm:text-base"
+              >
+                <Download size={20} />
+                <span>تحميل تطبيق مزار (APK للأندرويد)</span>
+                <span className="bg-white/20 text-[10px] px-2 py-0.5 rounded-full font-sans">v1.0</span>
+              </a>
+              <button 
+                onClick={() => setIsOEMModalOpen(true)}
+                className="bg-white/90 hover:bg-white text-orange-700 border border-orange-200 font-bold px-4 py-3 rounded-2xl shadow-sm hover:shadow transition flex items-center gap-2 text-xs sm:text-sm"
+              >
+                <ShieldCheck size={18} className="text-orange-500" />
+                <span>ضبط بطارية شاومي وسامسونج</span>
+              </button>
+            </div>
 
             {/* Search Box */}
             <div className="bg-white p-4 rounded-3xl shadow-[0_20px_50px_rgba(234,88,12,0.1)] border border-orange-100/50 max-w-lg relative z-20">
@@ -481,6 +556,14 @@ export default function App() {
         </div>
       )}
 
+      <OEMBatteryModal isOpen={isOEMModalOpen} onClose={() => setIsOEMModalOpen(false)} />
+      <DeveloperDiagnosticsModal 
+        isOpen={isDiagnosticsOpen} 
+        onClose={() => setIsDiagnosticsOpen(false)} 
+        currentUserEmail={userEmail}
+        userId={userId}
+        userRole={userRole}
+      />
     </div>
   );
 }
