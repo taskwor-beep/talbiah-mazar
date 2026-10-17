@@ -3,9 +3,11 @@ package com.mazar.app;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -13,6 +15,7 @@ import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
 import android.webkit.JavascriptInterface;
+import androidx.core.app.NotificationCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -26,8 +29,19 @@ public class MainActivity extends BridgeActivity {
         // Principle 3: Setup Notification Channel with IMPORTANCE_HIGH (Android 8.0+ / Android 13+)
         createDefaultNotificationChannel();
 
+        // Request POST_NOTIFICATIONS runtime permission on Android 13+ (API 33+)
+        requestNotificationRuntimePermission();
+
         // Principle 2: Setup Native Bridge for OEM Battery Management (Xiaomi, Huawei, Oppo, etc.)
         setupNativeBridge();
+    }
+
+    private void requestNotificationRuntimePermission() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 101);
+            }
+        }
     }
 
     private void createDefaultNotificationChannel() {
@@ -63,6 +77,54 @@ public class MainActivity extends BridgeActivity {
 
         public NativeOEMBridge(Context context) {
             this.context = context;
+        }
+
+        @JavascriptInterface
+        public void showNotification(String title, String message, String url) {
+            try {
+                NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+                if (notificationManager == null) return;
+
+                Intent intent = new Intent(context, MainActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                if (url != null) {
+                    intent.putExtra("url", url);
+                }
+
+                int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    flags |= PendingIntent.FLAG_IMMUTABLE;
+                }
+
+                PendingIntent pendingIntent = PendingIntent.getActivity(
+                    context,
+                    (int) System.currentTimeMillis(),
+                    intent,
+                    flags
+                );
+
+                int smallIcon = context.getApplicationInfo().icon;
+                if (smallIcon == 0) {
+                    smallIcon = android.R.drawable.ic_dialog_info;
+                }
+
+                NotificationCompat.Builder builder = new NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+                    .setSmallIcon(smallIcon)
+                    .setContentTitle(title != null ? title : "مزار")
+                    .setContentText(message != null ? message : "")
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(message != null ? message : ""))
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setDefaults(Notification.DEFAULT_ALL)
+                    .setAutoCancel(true)
+                    .setContentIntent(pendingIntent)
+                    .setVibrate(new long[]{0, 300, 200, 300, 200, 500})
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
+
+                int notificationId = (int) (System.currentTimeMillis() % Integer.MAX_VALUE);
+                notificationManager.notify(notificationId, builder.build());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
         @JavascriptInterface

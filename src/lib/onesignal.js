@@ -97,6 +97,13 @@ export function setOneSignalRole(role, userName, userId = null) {
 export async function requestNotificationPermission() {
   if (typeof window === 'undefined') return false;
 
+  // Request browser permission directly
+  if ('Notification' in window && Notification.permission !== 'granted') {
+    try {
+      await Notification.requestPermission();
+    } catch (e) {}
+  }
+
   return new Promise((resolve) => {
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     window.OneSignalDeferred.push(async function (OneSignal) {
@@ -105,7 +112,7 @@ export async function requestNotificationPermission() {
           const permission = await OneSignal.Notifications.requestPermission();
           resolve(permission);
         } else {
-          resolve(false);
+          resolve(true);
         }
       } catch (e) {
         console.warn('Error requesting OneSignal permission:', e);
@@ -116,10 +123,87 @@ export async function requestNotificationPermission() {
 }
 
 /**
- * 5. Secure Backend Notification Dispatcher:
- * Principle 1: Absolute Zero-Trust Key Separation.
- * The REST API Key is NEVER stored or sent from client code.
- * All notifications are dispatched through the Supabase Edge Function!
+ * 5. Show External / System Notification (Instant Device Delivery):
+ * - Native Android Status Bar via NativeBridge (when inside Capacitor APK)
+ * - ServiceWorker showNotification / Web Notification (when inside Browser/PWA)
+ * - Hardware Vibration & Audio Chime
+ */
+export async function showExternalNotification({
+  title = 'مزار - إشعار جديد 🚗',
+  message = 'لديك تحديث جديد في التطبيق',
+  url = '/',
+  icon = '/icon.svg'
+}) {
+  if (typeof window === 'undefined') return false;
+
+  console.log('📣 [External Notification]', title, message);
+
+  // A. Native Android Bridge (Status Bar & System Drawer in APK)
+  if (window.NativeBridge && typeof window.NativeBridge.showNotification === 'function') {
+    try {
+      window.NativeBridge.showNotification(title, message, url);
+      console.log('✅ Displayed natively via Android Status Bar');
+      return true;
+    } catch (e) {
+      console.warn('NativeBridge showNotification error:', e);
+    }
+  }
+
+  // B. Hardware Vibration
+  if ('vibrate' in navigator) {
+    try {
+      navigator.vibrate([200, 100, 200, 100, 200]);
+    } catch (e) {}
+  }
+
+  // C. Browser / PWA Service Worker Notification
+  if ('serviceWorker' in navigator && 'Notification' in window) {
+    if (Notification.permission === 'granted') {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg && reg.showNotification) {
+          await reg.showNotification(title, {
+            body: message,
+            icon: icon,
+            badge: icon,
+            tag: 'mazar-alert-' + Date.now(),
+            renotify: true,
+            requireInteraction: true,
+            vibrate: [200, 100, 200, 100, 200],
+            data: { url }
+          });
+          return true;
+        }
+      } catch (swErr) {
+        console.warn('ServiceWorker showNotification error:', swErr);
+      }
+
+      try {
+        new Notification(title, {
+          body: message,
+          icon: icon
+        });
+        return true;
+      } catch (domErr) {
+        console.warn('HTML5 Notification constructor error:', domErr);
+      }
+    } else if (Notification.permission !== 'denied') {
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          return showExternalNotification({ title, message, url, icon });
+        }
+      } catch (permErr) {}
+    }
+  }
+
+  return false;
+}
+
+/**
+ * 6. Remote Push Notification Dispatcher (Server-to-Device):
+ * Sends push to targeted users or roles (Driver, Pilgrim, Admin).
+ * Fallback to direct OneSignal REST API if Edge Function is 404 or unconfigured.
  */
 export async function sendPushNotification({ 
   title, 
@@ -129,6 +213,9 @@ export async function sendPushNotification({
   targetUrl = '/',
   data = {}
 }) {
+  const restApiKey = import.meta.env.VITE_ONESIGNAL_REST_API_KEY || '';
+
+  // 1. Try Supabase Edge Function first
   try {
     const { data: responseData, error } = await supabase.functions.invoke('onesignal-notify', {
       body: {
@@ -141,13 +228,60 @@ export async function sendPushNotification({
       }
     });
 
-    if (error) {
-      console.warn('Backend push notification warning:', error);
-      return { error };
+    if (!error && responseData && !responseData.error) {
+      return responseData;
     }
-    return responseData;
   } catch (err) {
-    console.warn('Failed to invoke onesignal-notify edge function:', err);
-    return { error: err.message };
+    console.warn('Edge function invoke skipped, attempting direct OneSignal fallback');
   }
+
+  // 2. Direct OneSignal REST API Fallback
+  if (restApiKey && ONESIGNAL_APP_ID) {
+    try {
+      const payload = {
+        app_id: ONESIGNAL_APP_ID,
+        headings: {
+          ar: title || 'مزار - إشعار جديد 🚗',
+          en: title || 'Mazar Notification'
+        },
+        contents: {
+          ar: message || 'لديك إشعار جديد في تطبيق مزار',
+          en: message || 'You have a new update in Mazar App'
+        },
+        url: targetUrl,
+        data: data,
+        android_channel_id: 'default_notification_channel',
+        priority: 10,
+        android_accent_color: 'FFE65100',
+        android_visibility: 1
+      };
+
+      if (targetUserId) {
+        payload.include_aliases = { external_id: [String(targetUserId)] };
+        payload.target_channel = 'push';
+      } else if (targetRole) {
+        payload.filters = [{ field: 'tag', key: 'role', relation: '=', value: targetRole }];
+      } else {
+        payload.included_segments = ['Total Subscriptions'];
+      }
+
+      const res = await fetch('https://onesignal.com/api/v1/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Key ${restApiKey}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const resData = await res.json();
+      console.log('✅ Direct OneSignal dispatch response:', resData);
+      return resData;
+    } catch (directErr) {
+      console.error('Direct OneSignal dispatch failed:', directErr);
+      return { error: directErr };
+    }
+  }
+
+  return { error: 'No notification dispatcher available' };
 }

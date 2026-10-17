@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import Footer from './Footer';
 import RideMap from './RideMap';
 import { playNewOrderAlert, playSuccessChime } from '../lib/sound';
-import { setOneSignalRole, requestNotificationPermission } from '../lib/onesignal';
+import { setOneSignalRole, requestNotificationPermission, showExternalNotification, sendPushNotification } from '../lib/onesignal';
 import { getReliablePosition } from '../lib/geo';
 
 export default function DriverDashboard({ userName, onLogout, onGoHome }) {
@@ -278,9 +278,19 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
           if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'pending')) {
             playNewOrderAlert();
             toast('🔔 طلب توصيل جديد متاح!', { icon: '🚗' });
+            showExternalNotification({
+              title: '🚗 طلب توصيل جديد متاح!',
+              message: `نقطة الانطلاق: ${payload.new?.pickup_location || 'موقع المعتمر'} ⬅️ الوجهة: ${payload.new?.dropoff_location || 'مشوار جديد'}`,
+              url: '/'
+            });
           } else if (payload.eventType === 'UPDATE' && payload.new?.status === 'accepted' && payload.new?.driver_id === driverId) {
             playSuccessChime();
             toast.success('🎉 تم قبول عرضك من المعتمر!');
+            showExternalNotification({
+              title: '🎉 تم قبول عرضك من المعتمر!',
+              message: 'وافق المعتمر على عرضك، توجه الآن لنقطة الانطلاق!',
+              url: '/'
+            });
           }
           fetchDriverData();
         }
@@ -457,6 +467,17 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         toast.error('خطأ من قاعدة البيانات: ' + error.message, { id: 'offer' });
       } else {
         toast.success('تم إرسال عرضك وتحديد موقعك بنجاح! في انتظار موافقة المعتمر.', { id: 'offer' });
+        
+        // Notify customer of new price offer
+        if (pricePrompt.customer_id) {
+          sendPushNotification({
+            title: '🚗 وصلك عرض سعر جديد لمشوارك!',
+            message: `قدم الكابتن ${userName || 'السائق'} عرضاً بقيمة ${newOfferPrice} د.ج لرحلتك`,
+            targetUserId: pricePrompt.customer_id,
+            targetUrl: '/'
+          }).catch(console.error);
+        }
+
         setPricePrompt(null);
         setNewOfferPrice('');
         fetchDriverData();
@@ -490,10 +511,18 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
     }
   };
 
-  const rejectRideRequest = async (id) => {
+  const rejectRideRequest = async (id, customerId = null) => {
     await supabase.from('orders').update({ status: 'cancelled' }).eq('id', id);
     fetchDriverData();
     toast.error('تم إلغاء الطلب');
+    if (customerId) {
+      sendPushNotification({
+        title: 'تم إلغاء الطلب ⚠️',
+        message: 'عذراً، اعتذر السائق عن تلبية هذا المشوار. يمكنك طلب سائق آخر متاح.',
+        targetUserId: customerId,
+        targetUrl: '/'
+      }).catch(console.error);
+    }
   };
 
   const finishRide = async () => {
@@ -502,6 +531,15 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         status: 'delivered',
         payment_status: 'paid'
       }).eq('id', activeRide.id);
+
+      if (activeRide.customer_id) {
+        sendPushNotification({
+          title: 'وصلت إلى وجهتك بسلامة الله ✨',
+          message: 'تم إنهاء الرحلة بنجاح. نتمنى لك عمرة مقبولة وزيارة مباركة!',
+          targetUserId: activeRide.customer_id,
+          targetUrl: '/'
+        }).catch(console.error);
+      }
     }
     setActiveRide(null);
     toast.success('تم إنهاء الرحلة بنجاح. تم تسجيل الأرباح في محفظتك 💰');

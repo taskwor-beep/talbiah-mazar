@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Settings, List as ListIcon, Check, X, Megaphone, Smartphone, Star, Search, Shield, Save, Package, Percent, DollarSign, Wallet } from 'lucide-react';
+import { Users, UserPlus, Settings, List as ListIcon, Check, X, Megaphone, Smartphone, Star, Search, Shield, Save, Package, Percent, DollarSign, Wallet, Send, Bell } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
+import { sendPushNotification, showExternalNotification } from '../lib/onesignal';
 
 export default function AdminDashboard({ userName, onLogout, onGoHome }) {
   const [activeTab, setActiveTab] = useState('users');
@@ -10,6 +11,8 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
   const [users, setUsers] = useState([]);
   const [driverRequests, setDriverRequests] = useState([]);
   const [offers, setOffers] = useState([]);
+  const [broadcastMessage, setBroadcastMessage] = useState({ title: '', message: '', targetRole: 'all' });
+  const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
   
   const [settings, setSettings] = useState({
     exchange_rate: { sar_to_dzd: 35 },
@@ -23,6 +26,31 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
 
   useEffect(() => {
     fetchData();
+
+    // Listen for new orders and driver registrations to notify Admin
+    const sub = supabase
+      .channel('admin_global_channel')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+        showExternalNotification({
+          title: '📋 طلب رحلة جديد في النظام!',
+          message: `طلب جديد: من ${payload.new?.pickup_location || 'العميل'} إلى ${payload.new?.dropoff_location || 'الوجهة'}`,
+          url: '/'
+        });
+        toast('طلب رحلة جديد في النظام!', { icon: '📋' });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'drivers' }, () => {
+        showExternalNotification({
+          title: '🚗 طلب انضمام سائق جديد!',
+          message: 'سجل كابتن جديد وينتظر مراجعة حسابه واعتماده.',
+          url: '/'
+        });
+        toast('طلب انضمام سائق جديد!', { icon: '🚗' });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(sub);
+    };
   }, []);
 
   const fetchData = async () => {
@@ -75,12 +103,48 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
   };
 
   const approveDriver = async (id) => {
+    // Get driver user_id
+    const { data: driverData } = await supabase.from('drivers').select('user_id').eq('id', id).maybeSingle();
     const { error } = await supabase.from('drivers').update({ status: 'approved' }).eq('id', id);
     if (!error) {
       setDriverRequests(prev => prev.filter(r => r.id !== id));
       toast.success('تمت الموافقة على السائق بنجاح');
+      if (driverData?.user_id) {
+        sendPushNotification({
+          title: '🎉 تهانينا! تم اعتماد حسابك كسائق في مزار',
+          message: 'تمت مراجعة بياناتك واعتماد حسابك ككابتن في مزار. يمكنك الآن استقبال المشاوير والطلبات!',
+          targetUserId: driverData.user_id,
+          targetRole: 'driver',
+          targetUrl: '/'
+        }).catch(console.error);
+      }
     } else {
       toast.error('حدث خطأ');
+    }
+  };
+
+  const handleSendBroadcast = async (e) => {
+    e.preventDefault();
+    if (!broadcastMessage.title || !broadcastMessage.message) {
+      return toast.error('يرجى كتابة عنوان ونص الإشعار');
+    }
+
+    setIsSendingBroadcast(true);
+    toast.loading('جاري إرسال الإشعار لجميع الأجهزة المستهدفة...', { id: 'broadcast' });
+    try {
+      const targetRole = broadcastMessage.targetRole === 'all' ? null : broadcastMessage.targetRole;
+      await sendPushNotification({
+        title: broadcastMessage.title,
+        message: broadcastMessage.message,
+        targetRole: targetRole,
+        targetUrl: '/'
+      });
+      toast.success('تم إرسال الإشعار بنجاح إلى جميع الأجهزة المشتركة! 📲', { id: 'broadcast' });
+      setBroadcastMessage({ title: '', message: '', targetRole: 'all' });
+    } catch (err) {
+      toast.error('فشل الإرسال: ' + err.message, { id: 'broadcast' });
+    } finally {
+      setIsSendingBroadcast(false);
     }
   };
 
@@ -194,6 +258,12 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
           >
             <Settings size={20} /> الإعدادات والنوافذ
           </button>
+          <button 
+            onClick={() => setActiveTab('broadcast')}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition ${activeTab === 'broadcast' ? 'bg-orange-500 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
+          >
+            <Megaphone size={20} /> بث الإشعارات
+          </button>
         </nav>
 
         <div className="pt-6 border-t border-slate-700 mt-auto">
@@ -226,6 +296,7 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
             {activeTab === 'drivers' && 'مراجعة طلبات انضمام السائقين'}
             {activeTab === 'offers' && 'مراجعة عروض السائقين'}
             {activeTab === 'settings' && 'إعدادات النوافذ المنبثقة والإعلانات'}
+            {activeTab === 'broadcast' && 'بث إشعارات عامة فورية (OneSignal Push)'}
           </h1>
           <p className="text-slate-500">مرحباً بك في لوحة تحكم الإدارة المركزية لمزار.</p>
         </div>
@@ -589,6 +660,83 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Broadcast Notifications Tab */}
+        {activeTab === 'broadcast' && (
+          <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 max-w-2xl">
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
+              <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center">
+                <Megaphone size={24} />
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-slate-800">إرسال إشعار فوري لجميع الأجهزة</h2>
+                <p className="text-xs text-slate-500">يصل التنبيه كإشعار خارجي في شريط الإشعارات لجميع الهواتف والمتصفحات</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSendBroadcast} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-2">الفئة المستهدفة</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastMessage({ ...broadcastMessage, targetRole: 'all' })}
+                    className={`p-3 rounded-xl text-xs font-bold border transition ${broadcastMessage.targetRole === 'all' ? 'bg-orange-500 text-white border-orange-500' : 'bg-slate-50 border-gray-200 text-slate-700'}`}
+                  >
+                    الجميع 👥
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastMessage({ ...broadcastMessage, targetRole: 'driver' })}
+                    className={`p-3 rounded-xl text-xs font-bold border transition ${broadcastMessage.targetRole === 'driver' ? 'bg-orange-500 text-white border-orange-500' : 'bg-slate-50 border-gray-200 text-slate-700'}`}
+                  >
+                    السائقون فقط 🚗
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastMessage({ ...broadcastMessage, targetRole: 'pilgrim' })}
+                    className={`p-3 rounded-xl text-xs font-bold border transition ${broadcastMessage.targetRole === 'pilgrim' ? 'bg-orange-500 text-white border-orange-500' : 'bg-slate-50 border-gray-200 text-slate-700'}`}
+                  >
+                    المعتمرون فقط 🕋
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">عنوان الإشعار</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="مثال: خصم خاص 20% على باقات المزارات اليوم 🚗"
+                  value={broadcastMessage.title}
+                  onChange={(e) => setBroadcastMessage({ ...broadcastMessage, title: e.target.value })}
+                  className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">نص التنبيه</label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="اكتب رسالة التنبيه التي ستظهر في شاشة القفل وشريط الإشعارات..."
+                  value={broadcastMessage.message}
+                  onChange={(e) => setBroadcastMessage({ ...broadcastMessage, message: e.target.value })}
+                  className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-orange-500 resize-none"
+                ></textarea>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSendingBroadcast}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 rounded-xl transition flex justify-center items-center gap-2 shadow-lg shadow-orange-500/20 disabled:opacity-50"
+              >
+                <Send size={18} />
+                {isSendingBroadcast ? 'جاري الإرسال...' : 'إرسال التنبيه الآن لجميع المشتركين 🚀'}
+              </button>
+            </form>
           </div>
         )}
         

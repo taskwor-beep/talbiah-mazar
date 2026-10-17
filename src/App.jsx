@@ -9,7 +9,7 @@ import AdminDashboard from './components/AdminDashboard';
 import GlobalPopups from './components/GlobalPopups';
 import OEMBatteryModal from './components/OEMBatteryModal';
 import DeveloperDiagnosticsModal from './components/DeveloperDiagnosticsModal';
-import { loginOneSignal, logoutOneSignal } from './lib/onesignal';
+import { loginOneSignal, logoutOneSignal, requestNotificationPermission } from './lib/onesignal';
 
 export default function App() {
   const [pickup, setPickup] = useState('');
@@ -58,6 +58,13 @@ export default function App() {
     if (userId) localStorage.setItem('userId', userId);
     if (userEmail) localStorage.setItem('userEmail', userEmail);
   }, [isLoggedIn, currentView, userName, userRole, userId, userEmail]);
+
+  React.useEffect(() => {
+    if (isLoggedIn && userId) {
+      loginOneSignal(userId, userRole, userName);
+      requestNotificationPermission();
+    }
+  }, [isLoggedIn, userId, userRole, userName]);
 
   React.useEffect(() => {
     const search = window.location.search;

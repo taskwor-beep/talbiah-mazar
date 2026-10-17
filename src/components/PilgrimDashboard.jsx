@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
 import RideMap from './RideMap';
-import { setOneSignalRole, requestNotificationPermission, sendPushNotification } from '../lib/onesignal';
+import { setOneSignalRole, requestNotificationPermission, sendPushNotification, showExternalNotification } from '../lib/onesignal';
 import { DESTINATIONS_DB } from '../lib/destinations';
 import { getReliablePosition } from '../lib/geo';
 
@@ -388,9 +388,19 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
             if (data.status === 'driver_offered') {
               setRideStatus('driver_offered');
               setOfferedRide(data);
+              showExternalNotification({
+                title: '🚗 وصلك عرض سعر جديد لمشوارك!',
+                message: `قدم الكابتن ${data.drivers?.users?.full_name || 'السائق'} عرضاً بقيمة ${data.total_amount} د.ج لرحلتك`,
+                url: '/'
+              });
             } else if (data.status === 'accepted') {
               if (rideStatus !== 'active') {
                 toast.success('تم قبول طلبك! السائق في طريقه إليك');
+                showExternalNotification({
+                  title: 'تم قبول طلبك! السائق في طريقه إليك 🚗',
+                  message: `الكابتن ${data.drivers?.users?.full_name || 'السائق'} في طريقه إلى موقعك الآن.`,
+                  url: '/'
+                });
               }
               setRideStatus('active');
               setOfferedRide(data);
@@ -401,6 +411,19 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
               setOfferedRide(null);
               setCurrentOrderId(null);
               toast.error('عذراً، لم يتوفر السائق لهذه الرحلة وتم الإلغاء. يرجى اختيار سائق آخر.');
+              showExternalNotification({
+                title: 'إلغاء الرحلة ⚠️',
+                message: 'تم إلغاء الرحلة، يرجى طلب سائق آخر متاح.',
+                url: '/'
+              });
+            } else if (data.status === 'delivered') {
+              setRideStatus('idle');
+              setOfferedRide(null);
+              showExternalNotification({
+                title: 'وصلت إلى وجهتك بسلامة الله ✨',
+                message: 'تم إنهاء الرحلة بنجاح. شكراً لاختيارك مزار!',
+                url: '/'
+              });
             }
           }
         }
@@ -608,6 +631,18 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
       setRideStatus('active');
       if (offeredRide) {
         setOfferedRide(prev => ({ ...prev, status: 'accepted', payment_method: 'cash' }));
+        // Notify the driver that the pilgrim accepted their offer
+        if (offeredRide.driver_id) {
+          supabase.from('drivers').select('user_id').eq('id', offeredRide.driver_id).maybeSingle().then(({ data: dUser }) => {
+            sendPushNotification({
+              title: '🎉 وافق المعتمر على عرضك!',
+              message: `وافق المعتمر ${userName || ''} على مشوارك بقيمة ${offeredRide.total_amount} د.ج! توجه لنقطة الانطلاق.`,
+              targetUserId: dUser?.user_id,
+              targetRole: 'driver',
+              targetUrl: '/'
+            }).catch(console.error);
+          });
+        }
       }
       toast.success('تم تأكيد المشوار بنجاح! سيتم الدفع نقداً عند الوصول للسائق.', { id: 'cash-payment' });
     } catch (err) {
