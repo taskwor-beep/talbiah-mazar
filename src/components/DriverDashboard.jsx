@@ -247,7 +247,13 @@ export default function DriverDashboard({ userName, userId: propUserId, onLogout
           const rejectedId = activeRideRef.current.id;
           setRejectedOrders(prev => [...prev, rejectedId]);
         } else if (activeRideRef.current && ['accepted', 'picking_up', 'in_transit'].includes(activeRideRef.current.status)) {
-          toast.error('تم إلغاء الرحلة.');
+          const previousActiveId = activeRideRef.current.id;
+          // Only show cancellation toast if the order status in DB is actually 'cancelled'
+          supabase.from('orders').select('status').eq('id', previousActiveId).maybeSingle().then(({ data: oCheck }) => {
+            if (oCheck?.status === 'cancelled') {
+              toast.error('⚠️ قام المعتمر بإلغاء المشوار.');
+            }
+          });
         }
         setActiveRide(null);
         activeRideRef.current = null;
@@ -680,19 +686,23 @@ export default function DriverDashboard({ userName, userId: propUserId, onLogout
 
   const cancelActiveRide = async () => {
     if (!activeRide || !window.confirm('هل أنت متأكد من إلغاء هذا المشوار؟')) return;
+    const cancellingId = activeRide.id;
+    const customerId = activeRide.customer_id;
+    activeRideRef.current = null;
+    setActiveRide(null);
+
     toast.loading('جاري إلغاء الرحلة...', { id: 'cancel-ride' });
-    const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', activeRide.id);
+    const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', cancellingId);
     if (!error) {
       toast.error('تم إلغاء الرحلة', { id: 'cancel-ride' });
-      if (activeRide.customer_id) {
+      if (customerId) {
         sendPushNotification({
           title: '⚠️ اعتذر السائق عن المشوار',
           message: `عذراً، اعتذر الكابتن ${userName || 'السائق'} عن إكمال المشوار. يرجى اختيار سائق آخر متاح.`,
-          targetUserId: activeRide.customer_id,
+          targetUserId: customerId,
           targetUrl: '/'
         }).catch(console.error);
       }
-      setActiveRide(null);
       fetchDriverData();
     } else {
       toast.error('خطأ: ' + error.message, { id: 'cancel-ride' });
@@ -701,21 +711,26 @@ export default function DriverDashboard({ userName, userId: propUserId, onLogout
 
   const finishRide = async () => {
     if (activeRide) {
+      const finishedId = activeRide.id;
+      const customerId = activeRide.customer_id;
+      // Clear active ride references immediately so fetchDriverData never treats this as a cancellation
+      activeRideRef.current = null;
+      setActiveRide(null);
+
       await supabase.from('orders').update({
         status: 'delivered',
         payment_status: 'paid'
-      }).eq('id', activeRide.id);
+      }).eq('id', finishedId);
 
-      if (activeRide.customer_id) {
+      if (customerId) {
         sendPushNotification({
           title: 'وصلت إلى وجهتك بسلامة الله ✨',
           message: 'تم إنهاء الرحلة بنجاح. شكراً لاختيارك مزار! نتمنى لك عمرة مقبولة وزيارة مباركة.',
-          targetUserId: activeRide.customer_id,
+          targetUserId: customerId,
           targetUrl: '/'
         }).catch(console.error);
       }
     }
-    setActiveRide(null);
     toast.success('تم إنهاء الرحلة بنجاح. تم تسجيل الأرباح في محفظتك 💰');
     fetchDriverData(); // Refresh stats & wallet
   };

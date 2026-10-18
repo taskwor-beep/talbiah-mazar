@@ -249,7 +249,7 @@ public class MazarBackgroundService extends Service {
 
     private void pollPilgrimOrders(String baseUrl, String apiKey, String customerId) {
         try {
-            String endpoint = baseUrl + "/rest/v1/orders?select=id,driver_id,price,status,pickup_address,dropoff_address,updated_at&customer_id=eq." + customerId + "&status=in.(driver_offered,accepted,picking_up,in_transit,delivered,cancelled)&order=updated_at.desc&limit=1";
+            String endpoint = baseUrl + "/rest/v1/orders?select=id,driver_id,total_amount,status,pickup_address,dropoff_address,created_at&customer_id=eq." + customerId + "&status=in.(driver_offered,accepted,picking_up,in_transit,delivered,cancelled)&order=created_at.desc&limit=1";
             String jsonResponse = makeHttpGet(endpoint, apiKey);
             if (jsonResponse == null) return;
 
@@ -270,7 +270,7 @@ public class MazarBackgroundService extends Service {
                     switch (status) {
                         case "driver_offered":
                             title = "💰 وصلك عرض سعر من السائق!";
-                            message = "السعر المعروض: " + o.optString("price", "محدد") + " د.ج - افتح التطبيق للموافقة";
+                            message = "السعر المعروض: " + o.optString("total_amount", "محدد") + " د.ج - افتح التطبيق للموافقة";
                             isUrgent = true;
                             break;
                         case "accepted":
