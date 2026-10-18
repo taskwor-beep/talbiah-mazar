@@ -10,15 +10,16 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
 import RideMap from './RideMap';
+import { playNewOrderAlert, playSuccessChime, playCancelChime } from '../lib/sound';
 import { setOneSignalRole, requestNotificationPermission, sendPushNotification, showExternalNotification } from '../lib/onesignal';
 import { DESTINATIONS_DB } from '../lib/destinations';
 import { getReliablePosition } from '../lib/geo';
 
-export default function PilgrimDashboard({ userName: initialUserName, onLogout, onGoHome, onUpdateUserName }) {
+export default function PilgrimDashboard({ userName: initialUserName, userId: propUserId, onLogout, onGoHome, onUpdateUserName }) {
   const [userName, setUserName] = useState(initialUserName || '');
   const [userPhone, setUserPhone] = useState('');
   const [userEmail, setUserEmail] = useState('');
-  const [userId, setUserId] = useState(null);
+  const [userId, setUserId] = useState(propUserId || localStorage.getItem('userId') || null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -57,7 +58,8 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
   }, [initialUserName]);
 
   useEffect(() => {
-    setOneSignalRole('pilgrim', userName);
+    const currentUserId = propUserId || userId || localStorage.getItem('userId');
+    setOneSignalRole('pilgrim', userName, currentUserId);
     requestNotificationPermission();
     fetchUserProfile();
 
@@ -96,6 +98,19 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
             setPickup(updatedOrder.pickup_address);
             setDropoff(updatedOrder.dropoff_address);
             setRideStatus('active');
+
+            if (updatedOrder.driver_id) {
+              supabase.from('drivers').select('user_id').eq('id', updatedOrder.driver_id).maybeSingle().then(({ data: dUser }) => {
+                sendPushNotification({
+                  title: '🎉 تم دفع الرحلة إلكترونياً وقبولها!',
+                  message: `قام المعتمر ${userName || ''} بدفع قيمة الرحلة إلكترونياً (${updatedOrder.total_amount} د.ج). توجه لنقطة الانطلاق!`,
+                  targetDriverId: updatedOrder.driver_id,
+                  targetUserId: dUser?.user_id,
+                  targetRole: 'driver',
+                  targetUrl: '/'
+                }).catch(console.error);
+              });
+            }
           }
         } catch (e) {
           console.error('Error confirming payment redirect:', e);
@@ -385,45 +400,76 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
           // When order status changes, fetch full details to get driver name and phone
           const { data } = await supabase.from('orders').select('*, drivers(users(full_name, phone_number))').eq('id', currentOrderId).limit(1).maybeSingle();
           if (data) {
+            const driverName = data.drivers?.users?.full_name || 'الكابتن';
             if (data.status === 'driver_offered') {
+              playNewOrderAlert();
               setRideStatus('driver_offered');
               setOfferedRide(data);
+              toast.success(`🚗 قدم ${driverName} عرض سعر جديد (${data.total_amount} د.ج)!`, { duration: 8000 });
               showExternalNotification({
                 title: '🚗 وصلك عرض سعر جديد لمشوارك!',
-                message: `قدم الكابتن ${data.drivers?.users?.full_name || 'السائق'} عرضاً بقيمة ${data.total_amount} د.ج لرحلتك`,
+                message: `قدم الكابتن ${driverName} عرضاً بقيمة ${data.total_amount} د.ج لرحلتك. راجع العرض للموافقة.`,
                 url: '/'
               });
             } else if (data.status === 'accepted') {
-              if (rideStatus !== 'active') {
-                toast.success('تم قبول طلبك! السائق في طريقه إليك');
-                showExternalNotification({
-                  title: 'تم قبول طلبك! السائق في طريقه إليك 🚗',
-                  message: `الكابتن ${data.drivers?.users?.full_name || 'السائق'} في طريقه إلى موقعك الآن.`,
-                  url: '/'
-                });
-              }
+              playSuccessChime();
+              toast.success(`🎉 تم قبول طلبك! ${driverName} في طريقه إليك`);
+              showExternalNotification({
+                title: 'تم قبول طلبك! السائق في طريقه إليك 🚗',
+                message: `الكابتن ${driverName} في طريقه إلى موقعك الآن.`,
+                url: '/'
+              });
+              setRideStatus('active');
+              setOfferedRide(data);
+            } else if (data.status === 'picking_up') {
+              playNewOrderAlert();
+              toast.success(`🚗 وصل السائق ${driverName} إلى موقعك وهو بانتظارك الآن!`, { duration: 8000 });
+              showExternalNotification({
+                title: '🚗 وصل السائق إلى موقعك!',
+                message: `الكابتن ${driverName} وصل إلى نقطة الانطلاق وبانتظارك الآن.`,
+                url: '/'
+              });
+              setRideStatus('active');
+              setOfferedRide(data);
+            } else if (data.status === 'in_transit') {
+              playSuccessChime();
+              toast.success('🚀 بدأت الرحلة الآن، نتمنى لكم رحلة سعيدة وآمنة!');
+              showExternalNotification({
+                title: '🚀 بدأت الرحلة نحو الوجهة',
+                message: `أنتم الآن في طريقكم إلى: ${data.dropoff_address}. نتمنى لكم رحلة آمنة!`,
+                url: '/'
+              });
               setRideStatus('active');
               setOfferedRide(data);
             } else if (data.status === 'pending' || data.status === 'pending_driver_approval') {
               setRideStatus('requesting');
             } else if (data.status === 'cancelled') {
+              playCancelChime();
               setRideStatus('idle');
               setOfferedRide(null);
               setCurrentOrderId(null);
-              toast.error('عذراً، لم يتوفر السائق لهذه الرحلة وتم الإلغاء. يرجى اختيار سائق آخر.');
+              localStorage.removeItem('mazar_active_order_id');
+              localStorage.removeItem('mazar_pending_chargily_order_id');
+              toast.error('عذراً، اعتذر السائق عن تلبية هذا المشوار أو تم الإلغاء. يرجى طلب سائق آخر.');
               showExternalNotification({
                 title: 'إلغاء الرحلة ⚠️',
                 message: 'تم إلغاء الرحلة، يرجى طلب سائق آخر متاح.',
                 url: '/'
               });
             } else if (data.status === 'delivered') {
+              playSuccessChime();
               setRideStatus('idle');
               setOfferedRide(null);
+              setCurrentOrderId(null);
+              localStorage.removeItem('mazar_active_order_id');
+              localStorage.removeItem('mazar_pending_chargily_order_id');
+              toast.success('✨ وصلت إلى وجهتك بسلامة الله. تم إنهاء الرحلة بنجاح!');
               showExternalNotification({
                 title: 'وصلت إلى وجهتك بسلامة الله ✨',
-                message: 'تم إنهاء الرحلة بنجاح. شكراً لاختيارك مزار!',
+                message: 'تم إنهاء الرحلة بنجاح. شكراً لاختيارك مزار! نتمنى لك عمرة مقبولة وزيارة مباركة.',
                 url: '/'
               });
+              fetchPastTrips();
             }
           }
         }
@@ -523,13 +569,27 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
         }
       }).catch(err => console.error('Failed to trigger whatsapp notify:', err));
 
-      // Trigger OneSignal Push Notification in background (all subscribed devices & drivers)
-      sendPushNotification({
-        title: 'طلب باقة / توصيل جديد 🚗',
-        message: `المعتمر ${userName || 'معتمر'} يطلب: ${finalDropoff}`,
-        targetRole: null,
-        targetUrl: '/'
-      }).catch(err => console.error('Failed to trigger OneSignal push:', err));
+      // Trigger OneSignal Push Notification in background
+      if (targetDriverId) {
+        // Dedicated request to a specific driver only
+        supabase.from('drivers').select('user_id').eq('id', targetDriverId).maybeSingle().then(({ data: dUser }) => {
+          sendPushNotification({
+            title: '⭐ طلب مشوار مخصص موجه إليك مباشرة!',
+            message: `طلب المعتمر ${userName || 'معتمر'} عرضك: من ${finalPickup} إلى ${finalDropoff} (${price || 0} د.ج)`,
+            targetDriverId: targetDriverId,
+            targetUserId: dUser?.user_id,
+            targetUrl: '/'
+          }).catch(console.error);
+        });
+      } else {
+        // General broadcast to ALL available drivers
+        sendPushNotification({
+          title: '🚗 طلب توصيل جديد متاح!',
+          message: `المعتمر ${userName || 'معتمر'} يطلب مشواراً: من ${finalPickup} إلى ${finalDropoff}`,
+          targetRole: 'driver',
+          targetUrl: '/'
+        }).catch(err => console.error('Failed to trigger OneSignal push:', err));
+      }
 
       fetchPastTrips();
     }
@@ -636,7 +696,8 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
           supabase.from('drivers').select('user_id').eq('id', offeredRide.driver_id).maybeSingle().then(({ data: dUser }) => {
             sendPushNotification({
               title: '🎉 وافق المعتمر على عرضك!',
-              message: `وافق المعتمر ${userName || ''} على مشوارك بقيمة ${offeredRide.total_amount} د.ج! توجه لنقطة الانطلاق.`,
+              message: `وافق المعتمر ${userName || ''} على مشوارك بقيمة ${offeredRide.total_amount} د.ج (نقداً عند الوصول). توجه لنقطة الانطلاق!`,
+              targetDriverId: offeredRide.driver_id,
               targetUserId: dUser?.user_id,
               targetRole: 'driver',
               targetUrl: '/'
@@ -651,11 +712,26 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
   };
 
   const rejectOffer = async () => {
+    const rejectedDriverId = offeredRide?.driver_id;
     const { error } = await supabase.from('orders').update({ status: 'pending', driver_id: null, total_amount: 0 }).eq('id', currentOrderId);
     if (error) {
       toast.error('خطأ: ' + error.message);
       return;
     }
+
+    if (rejectedDriverId) {
+      supabase.from('drivers').select('user_id').eq('id', rejectedDriverId).maybeSingle().then(({ data: dUser }) => {
+        sendPushNotification({
+          title: 'اعتذار عن قبول العرض',
+          message: 'اعتذر المعتمر عن قبول عرض السعر المقترح، يمكنك تقديم عرض آخر إذا رغبت.',
+          targetDriverId: rejectedDriverId,
+          targetUserId: dUser?.user_id,
+          targetRole: 'driver',
+          targetUrl: '/'
+        }).catch(console.error);
+      });
+    }
+
     setRideStatus('requesting');
     setOfferedRide(null);
     toast.error('تم رفض العرض، ننتظر عرضاً من سائق آخر...');
@@ -663,12 +739,27 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
 
   const cancelRequest = async () => {
     if (!currentOrderId) return;
+    const targetDriverId = offeredRide?.driver_id;
     // Set to cancelled so drivers know it's no longer available
     const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', currentOrderId);
     if (error) {
       toast.error('خطأ: ' + error.message);
       return;
     }
+
+    if (targetDriverId) {
+      supabase.from('drivers').select('user_id').eq('id', targetDriverId).maybeSingle().then(({ data: dUser }) => {
+        sendPushNotification({
+          title: '⚠️ قام المعتمر بإلغاء المشوار',
+          message: `قام المعتمر ${userName || ''} بإلغاء طلب المشوار. يمكنك استقبال طلبات أخرى.`,
+          targetDriverId: targetDriverId,
+          targetUserId: dUser?.user_id,
+          targetRole: 'driver',
+          targetUrl: '/'
+        }).catch(console.error);
+      });
+    }
+
     setRideStatus('idle');
     setOfferedRide(null);
     setCurrentOrderId(null);
@@ -1068,7 +1159,9 @@ export default function PilgrimDashboard({ userName: initialUserName, onLogout, 
                   <div className="absolute top-0 right-0 w-full h-2 bg-gradient-to-r from-orange-400 to-red-500"></div>
                   <h3 className="font-black text-xl mb-4 text-gray-800 flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
-                    السائق في طريقه إليك
+                    {offeredRide?.status === 'picking_up' ? 'الكابتن وصل إلى موقعك وهو بانتظارك 🚗' :
+                     offeredRide?.status === 'in_transit' ? 'الرحلة جارية نحو وجهتك 🚀' :
+                     'السائق قبل طلبك وفي طريقه إليك'}
                   </h3>
 
                   {/* Payment Status Alert Banner */}

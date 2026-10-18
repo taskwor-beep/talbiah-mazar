@@ -105,3 +105,67 @@ export function playSuccessChime() {
     console.warn('Success chime error:', e);
   }
 }
+
+/**
+ * Play a distinctive urgent alert for direct/dedicated driver requests
+ */
+export function playUrgentAlert() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    if ('vibrate' in navigator) {
+      navigator.vibrate([300, 100, 300, 100, 500]);
+    }
+
+    const now = ctx.currentTime;
+    const notes = [659.25, 880, 1046.5, 1318.5]; // E5, A5, C6, E6
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + i * 0.12);
+      gain.gain.setValueAtTime(0, now + i * 0.12);
+      gain.gain.linearRampToValueAtTime(0.4, now + i * 0.12 + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.12);
+      osc.stop(now + i * 0.12 + 0.3);
+    });
+  } catch (e) {
+    console.warn('Urgent alert error:', e);
+  }
+}
+
+/**
+ * Play a descending chime for trip cancellation
+ */
+export function playCancelChime() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    if ('vibrate' in navigator) {
+      navigator.vibrate([200, 100, 200]);
+    }
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(659.25, now); // E5
+    osc.frequency.exponentialRampToValueAtTime(329.63, now + 0.4); // E4
+
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.45);
+  } catch (e) {
+    console.warn('Cancel chime error:', e);
+  }
+}

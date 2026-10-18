@@ -203,6 +203,7 @@ export default function App() {
         ) : userRole === 'driver' ? (
           <DriverDashboard 
             userName={userName} 
+            userId={userId}
             onLogout={handleLogout} 
             onGoHome={() => setCurrentView('landing')}
             onOpenBatterySettings={() => setIsOEMModalOpen(true)}
@@ -210,6 +211,7 @@ export default function App() {
         ) : (
           <PilgrimDashboard 
             userName={userName} 
+            userId={userId}
             onLogout={handleLogout} 
             onGoHome={() => setCurrentView('landing')} 
             onOpenBatterySettings={() => setIsOEMModalOpen(true)}

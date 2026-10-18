@@ -4,11 +4,11 @@ import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import Footer from './Footer';
 import RideMap from './RideMap';
-import { playNewOrderAlert, playSuccessChime } from '../lib/sound';
+import { playNewOrderAlert, playSuccessChime, playUrgentAlert, playCancelChime } from '../lib/sound';
 import { setOneSignalRole, requestNotificationPermission, showExternalNotification, sendPushNotification } from '../lib/onesignal';
 import { getReliablePosition } from '../lib/geo';
 
-export default function DriverDashboard({ userName, onLogout, onGoHome }) {
+export default function DriverDashboard({ userName, userId: propUserId, onLogout, onGoHome }) {
   const [isOnline, setIsOnline] = useState(true);
   
   const [requests, setRequests] = useState([]);
@@ -95,17 +95,19 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
   }, [driverId, activeRide]);
 
   useEffect(() => {
-    setOneSignalRole('driver', userName);
+    const currentUserId = propUserId || localStorage.getItem('userId');
+    setOneSignalRole('driver', userName, currentUserId, driverId);
     requestNotificationPermission();
     fetchDriverData();
     // Do not call handleRefreshDriverGps() on initial mount to respect user request
-  }, [userName]);
+  }, [userName, propUserId]);
 
   const fetchDriverData = async () => {
     // Get driver by user name, or just first driver
     const { data: userData } = await supabase.from('users').select('*').eq('full_name', userName).limit(1).maybeSingle();
     let currentDriverId = null;
     let currentDriverRating = 5.0;
+    const currentUserId = userData?.id || propUserId || localStorage.getItem('userId');
     
     if (userData) {
       const { data: driverInfo } = await supabase.from('drivers').select('*').eq('user_id', userData.id).limit(1).maybeSingle();
@@ -179,6 +181,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
 
     if (currentDriverId) {
       setDriverId(currentDriverId);
+      setOneSignalRole('driver', userName, currentUserId, currentDriverId);
       
       // Fetch offers
       const { data: offersData } = await supabase.from('driver_offers').select('*').eq('driver_id', currentDriverId);
@@ -188,11 +191,18 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       const { data: packagesData } = await supabase.from('driver_packages').select('*, package_steps(*)').eq('driver_id', currentDriverId);
       if (packagesData) setPackages(packagesData);
 
-      // Check for active ride (driver_offered or accepted)
-      const { data: activeOrder } = await supabase.from('orders').select('*, users!orders_customer_id_fkey(full_name, phone_number)').eq('driver_id', currentDriverId).in('status', ['driver_offered', 'accepted']).limit(1).maybeSingle();
+      // Check for active ride (driver_offered, accepted, picking_up, in_transit)
+      const { data: activeOrder } = await supabase.from('orders')
+        .select('*, users!orders_customer_id_fkey(full_name, phone_number)')
+        .eq('driver_id', currentDriverId)
+        .in('status', ['driver_offered', 'accepted', 'picking_up', 'in_transit'])
+        .limit(1)
+        .maybeSingle();
+
       if (activeOrder) {
         const newActiveRide = {
           id: activeOrder.id,
+          customer_id: activeOrder.customer_id,
           pickup: activeOrder.pickup_address,
           dropoff: activeOrder.dropoff_address,
           price: activeOrder.total_amount,
@@ -210,7 +220,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         if (activeRideRef.current && activeRideRef.current.status === 'driver_offered') {
           const rejectedId = activeRideRef.current.id;
           setRejectedOrders(prev => [...prev, rejectedId]);
-        } else if (activeRideRef.current && activeRideRef.current.status === 'accepted') {
+        } else if (activeRideRef.current && ['accepted', 'picking_up', 'in_transit'].includes(activeRideRef.current.status)) {
           toast.error('تم إلغاء الرحلة.');
         }
         setActiveRide(null);
@@ -228,6 +238,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
 
           setRequests(validOrders.map(o => ({
             id: o.id,
+            customer_id: o.customer_id,
             pickup: o.pickup_address,
             dropoff: o.dropoff_address,
             price: o.total_amount || 'قابل للتفاوض',
@@ -275,23 +286,63 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
         (payload) => {
-          if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && payload.new?.status === 'pending')) {
-            playNewOrderAlert();
-            toast('🔔 طلب توصيل جديد متاح!', { icon: '🚗' });
-            showExternalNotification({
-              title: '🚗 طلب توصيل جديد متاح!',
-              message: `نقطة الانطلاق: ${payload.new?.pickup_location || 'موقع المعتمر'} ⬅️ الوجهة: ${payload.new?.dropoff_location || 'مشوار جديد'}`,
-              url: '/'
-            });
-          } else if (payload.eventType === 'UPDATE' && payload.new?.status === 'accepted' && payload.new?.driver_id === driverId) {
+          const newOrder = payload.new;
+          if (!newOrder) {
+            fetchDriverData();
+            return;
+          }
+
+          // 1. New Order created or updated to pending / pending_driver_approval
+          if (payload.eventType === 'INSERT' || (payload.eventType === 'UPDATE' && (newOrder.status === 'pending' || newOrder.status === 'pending_driver_approval'))) {
+            if (newOrder.driver_id) {
+              // Dedicated / Direct offer targeted to a specific driver
+              if (newOrder.driver_id === driverId) {
+                playUrgentAlert();
+                toast('⭐ طلب مشوار مخصص موجه إليك مباشرة من المعتمر!', { icon: '⭐', duration: 7000 });
+                showExternalNotification({
+                  title: '⭐ طلب مشوار خاص موجه إليك مباشرة!',
+                  message: `طلب المعتمر عرضك: من ${newOrder.pickup_address || 'الموقع الحالي'} ⬅️ إلى ${newOrder.dropoff_address || 'الوجهة'} (${newOrder.total_amount || 0} د.ج)`,
+                  url: '/'
+                });
+              } else {
+                // Targeted to someone else -> DO NOT ALERT THIS DRIVER!
+                return;
+              }
+            } else {
+              // General broadcast request open to all available drivers
+              playNewOrderAlert();
+              toast('🔔 طلب توصيل جديد متاح بالقرب منك!', { icon: '🚗', duration: 6000 });
+              showExternalNotification({
+                title: '🚗 طلب توصيل جديد متاح!',
+                message: `نقطة الانطلاق: ${newOrder.pickup_address || 'موقع المعتمر'} ⬅️ الوجهة: ${newOrder.dropoff_address || 'مشوار جديد'}`,
+                url: '/'
+              });
+            }
+          }
+          // 2. Pilgrim accepted driver's offer or paid for trip
+          else if (payload.eventType === 'UPDATE' && newOrder.status === 'accepted' && newOrder.driver_id === driverId) {
             playSuccessChime();
-            toast.success('🎉 تم قبول عرضك من المعتمر!');
+            const payText = newOrder.payment_method === 'card' ? 'مدفوع إلكترونياً عبر بطاقة' : 'نقداً عند الوصول';
+            toast.success(`🎉 تم قبول عرضك من المعتمر! (${payText})`, { duration: 7000 });
             showExternalNotification({
               title: '🎉 تم قبول عرضك من المعتمر!',
-              message: 'وافق المعتمر على عرضك، توجه الآن لنقطة الانطلاق!',
+              message: `وافق المعتمر على عرضك (${payText})، توجه الآن لنقطة الانطلاق!`,
               url: '/'
             });
           }
+          // 3. Order cancelled while assigned to this driver
+          else if (payload.eventType === 'UPDATE' && newOrder.status === 'cancelled') {
+            if (newOrder.driver_id === driverId || activeRideRef.current?.id === newOrder.id) {
+              playCancelChime();
+              toast.error('⚠️ قام المعتمر بإلغاء المشوار.', { duration: 6000 });
+              showExternalNotification({
+                title: '⚠️ تم إلغاء المشوار',
+                message: 'قام المعتمر بإلغاء طلب المشوار. يمكنك استقبال طلبات أخرى.',
+                url: '/'
+              });
+            }
+          }
+
           fetchDriverData();
         }
       )
@@ -430,6 +481,17 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       toast.error('خطأ من قاعدة البيانات: ' + error.message, { id: 'accept' });
     } else {
       toast.success('تم قبول الطلب وتحديد موقعك بنجاح! انطلق نحو العميل.', { id: 'accept' });
+      
+      // Notify customer of direct ride acceptance
+      if (ride.customer_id) {
+        sendPushNotification({
+          title: '🎉 تم قبول طلبك! السائق في طريقه إليك 🚗',
+          message: `وافق الكابتن ${userName || 'السائق'} على طلبك وهو في طريقه إلى موقعك الآن.`,
+          targetUserId: ride.customer_id,
+          targetUrl: '/'
+        }).catch(console.error);
+      }
+      
       fetchDriverData();
     }
   };
@@ -468,14 +530,27 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       } else {
         toast.success('تم إرسال عرضك وتحديد موقعك بنجاح! في انتظار موافقة المعتمر.', { id: 'offer' });
         
-        // Notify customer of new price offer
-        if (pricePrompt.customer_id) {
+        // Notify customer of new price offer (with fallback if customer_id wasn't in object)
+        const targetCustomerId = pricePrompt.customer_id;
+        if (targetCustomerId) {
           sendPushNotification({
             title: '🚗 وصلك عرض سعر جديد لمشوارك!',
             message: `قدم الكابتن ${userName || 'السائق'} عرضاً بقيمة ${newOfferPrice} د.ج لرحلتك`,
-            targetUserId: pricePrompt.customer_id,
+            targetUserId: targetCustomerId,
             targetUrl: '/'
           }).catch(console.error);
+        } else {
+          // Fallback fetch customer_id from database
+          supabase.from('orders').select('customer_id').eq('id', pricePrompt.id).maybeSingle().then(({ data: oData }) => {
+            if (oData?.customer_id) {
+              sendPushNotification({
+                title: '🚗 وصلك عرض سعر جديد لمشوارك!',
+                message: `قدم الكابتن ${userName || 'السائق'} عرضاً بقيمة ${newOfferPrice} د.ج لرحلتك`,
+                targetUserId: oData.customer_id,
+                targetUrl: '/'
+              }).catch(console.error);
+            }
+          });
         }
 
         setPricePrompt(null);
@@ -486,7 +561,6 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       toast.error('الرجاء إدخال سعر صحيح أكبر من الصفر.');
     }
   };
-
 
   const handleRefreshDriverGps = async () => {
     toast.loading('جاري تحديد موقعك...', { id: 'driver-gps' });
@@ -522,6 +596,78 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
         targetUserId: customerId,
         targetUrl: '/'
       }).catch(console.error);
+    } else {
+      supabase.from('orders').select('customer_id').eq('id', id).maybeSingle().then(({ data: oData }) => {
+        if (oData?.customer_id) {
+          sendPushNotification({
+            title: 'تم إلغاء الطلب ⚠️',
+            message: 'عذراً، اعتذر السائق عن تلبية هذا المشوار. يمكنك طلب سائق آخر متاح.',
+            targetUserId: oData.customer_id,
+            targetUrl: '/'
+          }).catch(console.error);
+        }
+      });
+    }
+  };
+
+  const notifyArrival = async () => {
+    if (!activeRide) return;
+    toast.loading('جاري إشعار المعتمر بوصولك...', { id: 'status-update' });
+    const { error } = await supabase.from('orders').update({ status: 'picking_up' }).eq('id', activeRide.id);
+    if (!error) {
+      toast.success('تم إشعار المعتمر بوصولك إلى الموقع! 🚗', { id: 'status-update' });
+      if (activeRide.customer_id) {
+        sendPushNotification({
+          title: '🚗 وصل السائق إلى موقعك!',
+          message: `الكابتن ${userName || 'السائق'} وصل إلى نقطة الانطلاق وبانتظارك الآن!`,
+          targetUserId: activeRide.customer_id,
+          targetUrl: '/'
+        }).catch(console.error);
+      }
+      fetchDriverData();
+    } else {
+      toast.error('حدث خطأ: ' + error.message, { id: 'status-update' });
+    }
+  };
+
+  const startRide = async () => {
+    if (!activeRide) return;
+    toast.loading('جاري بدء المشوار...', { id: 'status-update' });
+    const { error } = await supabase.from('orders').update({ status: 'in_transit' }).eq('id', activeRide.id);
+    if (!error) {
+      toast.success('بدأت الرحلة بنجاح! رافقتكم السلامة 🚀', { id: 'status-update' });
+      if (activeRide.customer_id) {
+        sendPushNotification({
+          title: '🚀 بدأت الرحلة الآن',
+          message: `أنتم الآن في طريقكم إلى: ${activeRide.dropoff}. نتمنى لكم رحلة آمنة ومريحة!`,
+          targetUserId: activeRide.customer_id,
+          targetUrl: '/'
+        }).catch(console.error);
+      }
+      fetchDriverData();
+    } else {
+      toast.error('حدث خطأ: ' + error.message, { id: 'status-update' });
+    }
+  };
+
+  const cancelActiveRide = async () => {
+    if (!activeRide || !window.confirm('هل أنت متأكد من إلغاء هذا المشوار؟')) return;
+    toast.loading('جاري إلغاء الرحلة...', { id: 'cancel-ride' });
+    const { error } = await supabase.from('orders').update({ status: 'cancelled' }).eq('id', activeRide.id);
+    if (!error) {
+      toast.error('تم إلغاء الرحلة', { id: 'cancel-ride' });
+      if (activeRide.customer_id) {
+        sendPushNotification({
+          title: '⚠️ اعتذر السائق عن المشوار',
+          message: `عذراً، اعتذر الكابتن ${userName || 'السائق'} عن إكمال المشوار. يرجى اختيار سائق آخر متاح.`,
+          targetUserId: activeRide.customer_id,
+          targetUrl: '/'
+        }).catch(console.error);
+      }
+      setActiveRide(null);
+      fetchDriverData();
+    } else {
+      toast.error('خطأ: ' + error.message, { id: 'cancel-ride' });
     }
   };
 
@@ -535,7 +681,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
       if (activeRide.customer_id) {
         sendPushNotification({
           title: 'وصلت إلى وجهتك بسلامة الله ✨',
-          message: 'تم إنهاء الرحلة بنجاح. نتمنى لك عمرة مقبولة وزيارة مباركة!',
+          message: 'تم إنهاء الرحلة بنجاح. شكراً لاختيارك مزار! نتمنى لك عمرة مقبولة وزيارة مباركة.',
           targetUserId: activeRide.customer_id,
           targetUrl: '/'
         }).catch(console.error);
@@ -983,7 +1129,10 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-gray-800 flex items-center gap-3">
                 <div className="w-4 h-4 bg-green-500 rounded-full animate-ping"></div>
-                {activeRide.status === 'driver_offered' ? 'في انتظار موافقة المعتمر...' : 'رحلة جارية نحو العميل'}
+                {activeRide.status === 'driver_offered' ? 'في انتظار موافقة المعتمر...' : 
+                 activeRide.status === 'picking_up' ? 'وصلت لموقع العميل 📍 بانتظار الركوب' :
+                 activeRide.status === 'in_transit' ? 'الرحلة جارية نحو الوجهة 🚀' :
+                 'رحلة مؤكدة - انطلق نحو العميل'}
               </h2>
               <span className="bg-orange-100 text-orange-600 font-black px-6 py-2 rounded-2xl text-xl">
                 {activeRide.price} د.ج
@@ -1047,12 +1196,45 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
             )}
 
             {activeRide.status === 'accepted' ? (
+              <div className="space-y-3">
+                <button onClick={notifyArrival} className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition flex items-center justify-center gap-2">
+                  <MapPin size={22} /> وصلت إلى موقع المعتمر 📍
+                </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={finishRide} className="bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black py-3.5 rounded-2xl shadow hover:-translate-y-0.5 transition">
+                    إنهاء الرحلة
+                  </button>
+                  <button onClick={cancelActiveRide} className="bg-red-50 text-red-600 font-bold py-3.5 rounded-2xl hover:bg-red-100 transition">
+                    إلغاء الرحلة
+                  </button>
+                </div>
+              </div>
+            ) : activeRide.status === 'picking_up' ? (
+              <div className="space-y-3">
+                <button onClick={startRide} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition flex items-center justify-center gap-2">
+                  <Navigation size={22} /> بدء الرحلة نحو الوجهة 🚀
+                </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={finishRide} className="bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black py-3.5 rounded-2xl shadow hover:-translate-y-0.5 transition">
+                    إنهاء الرحلة
+                  </button>
+                  <button onClick={cancelActiveRide} className="bg-red-50 text-red-600 font-bold py-3.5 rounded-2xl hover:bg-red-100 transition">
+                    إلغاء الرحلة
+                  </button>
+                </div>
+              </div>
+            ) : activeRide.status === 'in_transit' ? (
               <button onClick={finishRide} className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black text-xl py-5 rounded-2xl shadow-[0_10px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_15px_30px_rgba(34,197,94,0.4)] hover:-translate-y-1 transition">
-                إنهاء الرحلة
+                إنهاء الرحلة بنجاح ✨
               </button>
             ) : (
-              <div className="text-center p-4 bg-orange-50 text-orange-600 rounded-xl font-bold animate-pulse">
-                تم عرض السعر ({activeRide.price} د.ج) على المعتمر، يرجى الانتظار حتى يقبل...
+              <div className="space-y-3">
+                <div className="text-center p-4 bg-orange-50 text-orange-600 rounded-xl font-bold animate-pulse">
+                  تم عرض السعر ({activeRide.price} د.ج) على المعتمر، يرجى الانتظار حتى يقبل...
+                </div>
+                <button onClick={cancelActiveRide} className="w-full bg-gray-100 text-gray-600 font-bold py-3 rounded-xl hover:bg-red-50 hover:text-red-600 transition text-sm">
+                  سحب العرض وإلغاء الطلب
+                </button>
               </div>
             )}
           </div>
@@ -1102,7 +1284,7 @@ export default function DriverDashboard({ userName, onLogout, onGoHome }) {
                       )}
                     </div>
                     <div className="flex gap-3 mt-auto">
-                      <button onClick={() => rejectRideRequest(req.id)} className="bg-gray-50 p-4 rounded-2xl text-gray-400 hover:bg-red-50 hover:text-red-500 transition" title="رفض الطلب">
+                      <button onClick={() => rejectRideRequest(req.id, req.customer_id)} className="bg-gray-50 p-4 rounded-2xl text-gray-400 hover:bg-red-50 hover:text-red-500 transition" title="رفض الطلب">
                         <CloseIcon size={24} />
                       </button>
                       <button onClick={() => acceptRide(req)} className="flex-1 bg-gray-900 text-white font-black px-6 py-4 rounded-2xl hover:bg-black hover:shadow-lg transition flex items-center justify-center gap-2 text-lg">

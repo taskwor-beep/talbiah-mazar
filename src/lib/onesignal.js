@@ -44,7 +44,7 @@ export async function initOneSignal() {
  * 2. Identity & Subscription Lifecycle:
  * Login user using external_id (Database UUID).
  */
-export async function loginOneSignal(userId, role, userName) {
+export async function loginOneSignal(userId, role, userName, driverId = null) {
   if (typeof window === 'undefined') return;
 
   window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -57,6 +57,8 @@ export async function loginOneSignal(userId, role, userName) {
       if (OneSignal.User) {
         if (role) await OneSignal.User.addTag('role', role);
         if (userName) await OneSignal.User.addTag('name', userName);
+        if (userId) await OneSignal.User.addTag('user_id', String(userId));
+        if (driverId) await OneSignal.User.addTag('driver_id', String(driverId));
       }
     } catch (e) {
       console.warn('OneSignal login error:', e);
@@ -87,8 +89,8 @@ export async function logoutOneSignal() {
 /**
  * Tag the user by their role ('driver' or 'pilgrim') - backward compatibility
  */
-export function setOneSignalRole(role, userName, userId = null) {
-  loginOneSignal(userId, role, userName);
+export function setOneSignalRole(role, userName, userId = null, driverId = null) {
+  loginOneSignal(userId, role, userName, driverId);
 }
 
 /**
@@ -210,6 +212,7 @@ export async function sendPushNotification({
   message, 
   targetRole = null, 
   targetUserId = null, 
+  targetDriverId = null,
   targetUrl = '/',
   data = {}
 }) {
@@ -223,6 +226,7 @@ export async function sendPushNotification({
         message,
         targetRole,
         targetUserId,
+        targetDriverId,
         targetUrl,
         data
       }
@@ -256,11 +260,14 @@ export async function sendPushNotification({
         android_visibility: 1
       };
 
-      if (targetUserId) {
-        payload.include_aliases = { external_id: [String(targetUserId)] };
-        payload.target_channel = 'push';
+      if (targetDriverId) {
+        // Target dedicated driver by driver_id tag
+        payload.filters = [{ field: 'tag', key: 'driver_id', relation: '=', value: String(targetDriverId) }];
+      } else if (targetUserId) {
+        // Target specific user by user_id tag or external_id alias
+        payload.filters = [{ field: 'tag', key: 'user_id', relation: '=', value: String(targetUserId) }];
       } else if (targetRole) {
-        payload.filters = [{ field: 'tag', key: 'role', relation: '=', value: targetRole }];
+        payload.filters = [{ field: 'tag', key: 'role', relation: '=', value: String(targetRole) }];
       } else {
         payload.included_segments = ['Total Subscriptions'];
       }

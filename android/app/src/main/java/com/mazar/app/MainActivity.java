@@ -9,6 +9,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.media.AudioAttributes;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -36,6 +38,18 @@ public class MainActivity extends BridgeActivity {
         setupNativeBridge();
     }
 
+    @Override
+    public void onStart() {
+        super.onStart();
+        setupNativeBridge();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        setupNativeBridge();
+    }
+
     private void requestNotificationRuntimePermission() {
         if (Build.VERSION.SDK_INT >= 33) {
             if (checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
@@ -60,6 +74,13 @@ public class MainActivity extends BridgeActivity {
                 channel.setVibrationPattern(new long[]{0, 250, 200, 250, 200, 500});
                 channel.setShowBadge(true);
                 channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+
+                Uri defaultSoundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                AudioAttributes audioAttributes = new AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .build();
+                channel.setSound(defaultSoundUri, audioAttributes);
 
                 notificationManager.createNotificationChannel(channel);
             }
@@ -118,6 +139,7 @@ public class MainActivity extends BridgeActivity {
                     .setAutoCancel(true)
                     .setContentIntent(pendingIntent)
                     .setVibrate(new long[]{0, 300, 200, 300, 200, 500})
+                    .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC);
 
                 int notificationId = (int) (System.currentTimeMillis() % Integer.MAX_VALUE);

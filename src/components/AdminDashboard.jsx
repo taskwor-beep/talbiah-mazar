@@ -33,7 +33,7 @@ export default function AdminDashboard({ userName, onLogout, onGoHome }) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
         showExternalNotification({
           title: '📋 طلب رحلة جديد في النظام!',
-          message: `طلب جديد: من ${payload.new?.pickup_location || 'العميل'} إلى ${payload.new?.dropoff_location || 'الوجهة'}`,
+          message: `طلب جديد: من ${payload.new?.pickup_address || 'العميل'} إلى ${payload.new?.dropoff_address || 'الوجهة'}`,
           url: '/'
         });
         toast('طلب رحلة جديد في النظام!', { icon: '📋' });
