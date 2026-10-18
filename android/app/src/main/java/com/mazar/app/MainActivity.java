@@ -7,6 +7,7 @@ import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.media.AudioAttributes;
@@ -48,6 +49,22 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
         setupNativeBridge();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (this.bridge != null && this.bridge.getWebView() != null) {
+            this.bridge.getWebView().resumeTimers();
+        }
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (this.bridge != null && this.bridge.getWebView() != null) {
+            this.bridge.getWebView().resumeTimers();
+        }
     }
 
     private void requestNotificationRuntimePermission() {
@@ -214,6 +231,55 @@ public class MainActivity extends BridgeActivity {
                 context.startActivity(intent);
             } catch (Exception e) {
                 requestIgnoreBatteryOptimizations();
+            }
+        }
+
+        @JavascriptInterface
+        public void setUserSession(String role, String userId, String driverId, String supabaseUrl, String supabaseKey) {
+            try {
+                SharedPreferences prefs = context.getSharedPreferences(MazarBackgroundService.PREFS_NAME, Context.MODE_PRIVATE);
+                SharedPreferences.Editor editor = prefs.edit();
+                if (role != null) editor.putString(MazarBackgroundService.PREF_ROLE, role);
+                if (userId != null) editor.putString(MazarBackgroundService.PREF_USER_ID, userId);
+                if (driverId != null) editor.putString(MazarBackgroundService.PREF_DRIVER_ID, driverId);
+                if (supabaseUrl != null) editor.putString(MazarBackgroundService.PREF_SUPABASE_URL, supabaseUrl);
+                if (supabaseKey != null) editor.putString(MazarBackgroundService.PREF_SUPABASE_KEY, supabaseKey);
+                editor.apply();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
+        public void startBackgroundService() {
+            try {
+                Intent serviceIntent = new Intent(context, MazarBackgroundService.class);
+                serviceIntent.setAction(MazarBackgroundService.ACTION_START);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent);
+                } else {
+                    context.startService(serviceIntent);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
+        public void stopBackgroundService() {
+            try {
+                Intent serviceIntent = new Intent(context, MazarBackgroundService.class);
+                serviceIntent.setAction(MazarBackgroundService.ACTION_STOP);
+                context.startService(serviceIntent);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
+        public void markOrderAlerted(String orderId) {
+            if (orderId != null) {
+                MazarBackgroundService.alertedOrderIds.add(orderId);
             }
         }
     }

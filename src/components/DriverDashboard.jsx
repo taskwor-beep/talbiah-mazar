@@ -102,6 +102,16 @@ export default function DriverDashboard({ userName, userId: propUserId, onLogout
     // Do not call handleRefreshDriverGps() on initial mount to respect user request
   }, [userName, propUserId]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.NativeBridge) {
+      if (isOnline) {
+        window.NativeBridge.startBackgroundService?.();
+      } else {
+        window.NativeBridge.stopBackgroundService?.();
+      }
+    }
+  }, [isOnline]);
+
   const fetchDriverData = async () => {
     // Get driver by user name, or just first driver
     const { data: userData } = await supabase.from('users').select('*').eq('full_name', userName).limit(1).maybeSingle();
@@ -183,6 +193,22 @@ export default function DriverDashboard({ userName, userId: propUserId, onLogout
       setDriverId(currentDriverId);
       setOneSignalRole('driver', userName, currentUserId, currentDriverId);
       
+      // Sync session with Android Native Foreground Background Service
+      if (typeof window !== 'undefined' && window.NativeBridge) {
+        if (typeof window.NativeBridge.setUserSession === 'function') {
+          window.NativeBridge.setUserSession(
+            'driver',
+            String(currentUserId || ''),
+            String(currentDriverId),
+            import.meta.env.VITE_SUPABASE_URL,
+            import.meta.env.VITE_SUPABASE_ANON_KEY
+          );
+        }
+        if (typeof window.NativeBridge.startBackgroundService === 'function') {
+          window.NativeBridge.startBackgroundService();
+        }
+      }
+
       // Fetch offers
       const { data: offersData } = await supabase.from('driver_offers').select('*').eq('driver_id', currentDriverId);
       if (offersData) setOffers(offersData);
@@ -297,6 +323,7 @@ export default function DriverDashboard({ userName, userId: propUserId, onLogout
             if (newOrder.driver_id) {
               // Dedicated / Direct offer targeted to a specific driver
               if (newOrder.driver_id === driverId) {
+                window.NativeBridge?.markOrderAlerted?.(newOrder.id);
                 playUrgentAlert();
                 toast('⭐ طلب مشوار مخصص موجه إليك مباشرة من المعتمر!', { icon: '⭐', duration: 7000 });
                 showExternalNotification({
@@ -310,6 +337,7 @@ export default function DriverDashboard({ userName, userId: propUserId, onLogout
               }
             } else {
               // General broadcast request open to all available drivers
+              window.NativeBridge?.markOrderAlerted?.(newOrder.id);
               playNewOrderAlert();
               toast('🔔 طلب توصيل جديد متاح بالقرب منك!', { icon: '🚗', duration: 6000 });
               showExternalNotification({
@@ -880,6 +908,57 @@ export default function DriverDashboard({ userName, userId: propUserId, onLogout
               <span className={`text-sm font-bold px-4 py-2 rounded-full transition cursor-pointer ${!isOnline ? 'bg-gray-100 text-gray-800 shadow-inner' : 'text-gray-400 hover:text-gray-600'}`} onClick={() => setIsOnline(false)}>غير متصل</span>
               <span className={`text-sm font-bold px-4 py-2 rounded-full transition cursor-pointer ${isOnline ? 'bg-green-500 text-white shadow-md' : 'text-gray-400 hover:text-gray-600'}`} onClick={() => setIsOnline(true)}>متصل للطلبات</span>
             </div>
+          </div>
+        </div>
+
+        {/* Background Notifications & OEM Battery Optimization Card */}
+        <div className="bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-emerald-500/10 border border-orange-500/20 rounded-2xl p-4 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-3.5 w-3.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-xs text-gray-800">خدمة التنبيهات الأصلية في الخلفية:</span>
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">🟢 متصلة ونشطة</span>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                تطبيق مزار يستقبل الطلبات ويرن بجرس قوي حتى أثناء إغلاق الشاشة أو استخدام خرائط جوجل
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.NativeBridge && typeof window.NativeBridge.requestIgnoreBatteryOptimizations === 'function') {
+                  window.NativeBridge.requestIgnoreBatteryOptimizations();
+                  toast.success('تم فتح شاشة تحسين البطارية - اختر "بدون قيود" لضمان وصول التنبيهات دائماً ⚡');
+                } else {
+                  toast.info('هذه الميزة تعمل داخل تطبيق أندرويد (APK)');
+                }
+              }}
+              className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+              title="إلغاء قيود توفير الطاقة"
+            >
+              <span>⚡</span>
+              <span>استثناء قيود البطارية</span>
+            </button>
+            <button
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.NativeBridge && typeof window.NativeBridge.openAutoStartSettings === 'function') {
+                  window.NativeBridge.openAutoStartSettings();
+                  toast.success('تم فتح إعدادات التشغيل التلقائي (شاومي / سامسونج / هواوي)');
+                } else {
+                  toast.info('هذه الميزة تعمل داخل تطبيق أندرويد (APK)');
+                }
+              }}
+              className="px-3 py-1.5 bg-gray-800 hover:bg-gray-900 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+              title="ضبط التشغيل التلقائي للهواتف الصينية"
+            >
+              <span>⚙️</span>
+              <span>التشغيل التلقائي</span>
+            </button>
           </div>
         </div>
 

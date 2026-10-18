@@ -63,6 +63,17 @@ export default function App() {
     if (isLoggedIn && userId) {
       loginOneSignal(userId, userRole, userName);
       requestNotificationPermission();
+
+      if (typeof window !== 'undefined' && window.NativeBridge) {
+        window.NativeBridge.setUserSession?.(
+          userRole,
+          String(userId),
+          null,
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_ANON_KEY
+        );
+        window.NativeBridge.startBackgroundService?.();
+      }
     }
   }, [isLoggedIn, userId, userRole, userName]);
 
@@ -175,6 +186,9 @@ export default function App() {
   const handleLogout = () => {
     // Principle 4: Clean OneSignal session
     logoutOneSignal();
+    if (typeof window !== 'undefined' && window.NativeBridge) {
+      window.NativeBridge.stopBackgroundService?.();
+    }
     setIsLoggedIn(false);
     setCurrentView('landing');
     setUserName('');

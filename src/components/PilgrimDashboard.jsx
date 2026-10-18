@@ -63,6 +63,22 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
     requestNotificationPermission();
     fetchUserProfile();
 
+    // Sync session with Android Native Foreground Background Service
+    if (typeof window !== 'undefined' && window.NativeBridge) {
+      if (typeof window.NativeBridge.setUserSession === 'function') {
+        window.NativeBridge.setUserSession(
+          'pilgrim',
+          String(currentUserId || ''),
+          null,
+          import.meta.env.VITE_SUPABASE_URL,
+          import.meta.env.VITE_SUPABASE_ANON_KEY
+        );
+      }
+      if (typeof window.NativeBridge.startBackgroundService === 'function') {
+        window.NativeBridge.startBackgroundService();
+      }
+    }
+
     // Check if returning from Chargily checkout
     const urlParams = new URLSearchParams(window.location.search);
     const pStatus = urlParams.get('payment_status');
@@ -400,6 +416,7 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
           // When order status changes, fetch full details to get driver name and phone
           const { data } = await supabase.from('orders').select('*, drivers(users(full_name, phone_number))').eq('id', currentOrderId).limit(1).maybeSingle();
           if (data) {
+            window.NativeBridge?.markOrderAlerted?.(currentOrderId + '_' + data.status);
             const driverName = data.drivers?.users?.full_name || 'الكابتن';
             if (data.status === 'driver_offered') {
               playNewOrderAlert();
