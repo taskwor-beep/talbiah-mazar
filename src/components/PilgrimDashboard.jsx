@@ -49,6 +49,18 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
   const [availableOffers, setAvailableOffers] = useState([]);
   const [pastTrips, setPastTrips] = useState([]);
   const [isLoadingTrips, setIsLoadingTrips] = useState(false);
+  const [pendingPayment, setPendingPayment] = useState(() => {
+    try {
+      const cid = localStorage.getItem('mazar_chargily_checkout_id');
+      const oid = localStorage.getItem('mazar_pending_chargily_order_id');
+      const curl = localStorage.getItem('mazar_chargily_checkout_url');
+      return (cid && oid) ? { checkoutId: cid, orderId: oid, checkoutUrl: curl } : null;
+    } catch {
+      return null;
+    }
+  });
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const isConfirmingPaymentRef = React.useRef(false);
 
   useEffect(() => {
     if (initialUserName && initialUserName !== userName) {
@@ -90,6 +102,9 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
       setRideStatus('active');
       localStorage.setItem('mazar_active_order_id', orderIdParam);
       localStorage.removeItem('mazar_pending_chargily_order_id');
+      localStorage.removeItem('mazar_chargily_checkout_id');
+      localStorage.removeItem('mazar_chargily_checkout_url');
+      setPendingPayment(null);
       toast.success('تم الدفع بنجاح عبر Chargily! السائق في طريقه إليك 🚗💳', { duration: 7000 });
 
       // 2. Update Supabase order and fetch confirmed order details directly
@@ -311,6 +326,163 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
     }, 3000);
   };
 
+  const verifyAndConfirmPayment = async (checkoutId, orderId, isManual = false) => {
+    if (!checkoutId || !orderId) return;
+    if (isConfirmingPaymentRef.current) return;
+
+    try {
+      if (isManual) setIsVerifyingPayment(true);
+      const chargilyKey = import.meta.env.VITE_CHARGILY_SECRET_KEY || 'test_sk_jzpV4j750VHFLA2I31c7LORxXhX4uOaVIagtoA8W';
+      const isLive = chargilyKey?.startsWith('live_');
+      const checkUrl = isLive 
+        ? `https://pay.chargily.net/api/v2/checkouts/${checkoutId}` 
+        : `https://pay.chargily.net/test/api/v2/checkouts/${checkoutId}`;
+
+      const resp = await fetch(checkUrl, {
+        headers: { 'Authorization': `Bearer ${chargilyKey}` }
+      });
+
+      if (!resp.ok) {
+        if (isManual) toast.error('تعذر الاتصال ببوابة شارجيلي للتحقق من العملية.');
+        return;
+      }
+
+      const checkoutData = await resp.json();
+
+      if (checkoutData.status === 'paid') {
+        isConfirmingPaymentRef.current = true;
+        toast.loading('تم التحقق من الدفع بنجاح! جاري تثبيت الحجز وتنبيه السائق...', { id: 'confirm-payment' });
+
+        // 1. Update Supabase order
+        const { error: updErr } = await supabase.from('orders').update({
+          status: 'accepted',
+          payment_method: 'card',
+          payment_status: 'paid'
+        }).eq('id', orderId);
+
+        if (updErr) console.warn('Supabase update warning:', updErr);
+
+        // 2. Clear pending payment storage & state
+        localStorage.removeItem('mazar_chargily_checkout_id');
+        localStorage.removeItem('mazar_chargily_checkout_url');
+        localStorage.removeItem('mazar_pending_chargily_order_id');
+        localStorage.setItem('mazar_active_order_id', orderId);
+        setPendingPayment(null);
+
+        // 3. Fetch updated order
+        const { data: updatedOrder } = await supabase.from('orders')
+          .select('*, drivers(user_id, users(full_name, phone_number))')
+          .eq('id', orderId)
+          .maybeSingle();
+
+        // 4. Update UI
+        if (updatedOrder) {
+          setCurrentOrderId(updatedOrder.id);
+          setOfferedRide(updatedOrder);
+          setPickup(updatedOrder.pickup_address);
+          setDropoff(updatedOrder.dropoff_address);
+          setRideStatus('active');
+
+          // 5. Notify Driver
+          if (updatedOrder.driver_id) {
+            const driverUserId = updatedOrder.drivers?.user_id;
+            sendPushNotification({
+              title: '🎉 تم دفع الرحلة إلكترونياً وقبولها!',
+              message: `قام المعتمر ${userName || ''} بدفع قيمة الرحلة إلكترونياً (${updatedOrder.total_amount} د.ج). توجه لنقطة الانطلاق!`,
+              targetDriverId: updatedOrder.driver_id,
+              targetUserId: driverUserId,
+              targetRole: 'driver',
+              targetUrl: '/'
+            }).catch(console.error);
+          }
+        }
+
+        playSuccessChime();
+        toast.success('تم تأكيد الدفع بنجاح عبر Chargily! السائق في طريقه إليك 🚗💳', { id: 'confirm-payment', duration: 7000 });
+        fetchData(orderId);
+        fetchPastTrips();
+      } else if (checkoutData.status === 'failed' || checkoutData.status === 'canceled' || checkoutData.status === 'expired') {
+        localStorage.removeItem('mazar_chargily_checkout_id');
+        localStorage.removeItem('mazar_chargily_checkout_url');
+        localStorage.removeItem('mazar_pending_chargily_order_id');
+        setPendingPayment(null);
+        toast.error(checkoutData.status === 'failed' ? 'فشلت عملية الدفع في شارجيلي. يمكنك المحاولة مجدداً أو الدفع نقداً.' : 'تم إلغاء عملية الدفع.');
+      } else if (isManual) {
+        toast('عملية الدفع لم تكتمل بعد على صفحة شارجيلي. يرجى إتمام الدفع أو المحاولة مجدداً.', { icon: '⏳' });
+      }
+    } catch (err) {
+      console.error('Error verifying chargily checkout:', err);
+      if (isManual) toast.error('خطأ في التحقق من الدفع: ' + err.message);
+    } finally {
+      if (isManual) setIsVerifyingPayment(false);
+      isConfirmingPaymentRef.current = false;
+    }
+  };
+
+  const findAndVerifyOrderPayment = async (orderId) => {
+    try {
+      const chargilyKey = import.meta.env.VITE_CHARGILY_SECRET_KEY || 'test_sk_jzpV4j750VHFLA2I31c7LORxXhX4uOaVIagtoA8W';
+      const isLive = chargilyKey?.startsWith('live_');
+      const listUrl = isLive ? 'https://pay.chargily.net/api/v2/checkouts' : 'https://pay.chargily.net/test/api/v2/checkouts';
+      const resp = await fetch(listUrl, { headers: { 'Authorization': `Bearer ${chargilyKey}` } });
+      if (!resp.ok) return;
+      const resJson = await resp.json();
+      const checkouts = resJson.data || [];
+      const matchingPaid = checkouts.find(ch => {
+        if (ch.status !== 'paid') return false;
+        if (Array.isArray(ch.metadata)) {
+          return ch.metadata.some(m => m.booking_id === orderId);
+        }
+        return ch.metadata?.booking_id === orderId;
+      });
+      if (matchingPaid) {
+        await verifyAndConfirmPayment(matchingPaid.id, orderId, false);
+      }
+    } catch (e) {
+      console.warn('Error checking recent checkouts:', e);
+    }
+  };
+
+  const cancelPendingPaymentState = () => {
+    localStorage.removeItem('mazar_chargily_checkout_id');
+    localStorage.removeItem('mazar_chargily_checkout_url');
+    localStorage.removeItem('mazar_pending_chargily_order_id');
+    setPendingPayment(null);
+    toast('تم إلغاء حالة الدفع الإلكتروني. يمكنك اختيار الدفع نقداً أو إعادة المحاولة.');
+  };
+
+  useEffect(() => {
+    if (!pendingPayment?.checkoutId || !pendingPayment?.orderId) return;
+
+    // Continuous polling every 3 seconds while payment is pending
+    const interval = setInterval(() => {
+      verifyAndConfirmPayment(pendingPayment.checkoutId, pendingPayment.orderId, false);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [pendingPayment?.checkoutId, pendingPayment?.orderId]);
+
+  useEffect(() => {
+    const handleFocusOrResume = () => {
+      const cid = localStorage.getItem('mazar_chargily_checkout_id');
+      const oid = localStorage.getItem('mazar_pending_chargily_order_id');
+      if (cid && oid) {
+        verifyAndConfirmPayment(cid, oid, false);
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrResume);
+    const handleVis = () => {
+      if (document.visibilityState === 'visible') handleFocusOrResume();
+    };
+    document.addEventListener('visibilitychange', handleVis);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrResume);
+      document.removeEventListener('visibilitychange', handleVis);
+    };
+  }, []);
+
   const fetchData = async (forcedOrderId = null) => {
     // Fetch approved packages with their nested steps and driver details
     const { data, error } = await supabase
@@ -396,6 +568,13 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
         setRideStatus('active');
       } else if (foundActiveOrder.status === 'driver_offered') {
         setRideStatus('driver_offered');
+        const storedCid = localStorage.getItem('mazar_chargily_checkout_id');
+        const storedOid = localStorage.getItem('mazar_pending_chargily_order_id');
+        if (storedCid && storedOid === foundActiveOrder.id) {
+          verifyAndConfirmPayment(storedCid, foundActiveOrder.id, false);
+        } else if (foundActiveOrder.payment_method === 'card' && foundActiveOrder.payment_status === 'pending') {
+          findAndVerifyOrderPayment(foundActiveOrder.id);
+        }
       } else {
         setRideStatus('requesting');
       }
@@ -467,6 +646,9 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
               setCurrentOrderId(null);
               localStorage.removeItem('mazar_active_order_id');
               localStorage.removeItem('mazar_pending_chargily_order_id');
+              localStorage.removeItem('mazar_chargily_checkout_id');
+              localStorage.removeItem('mazar_chargily_checkout_url');
+              setPendingPayment(null);
               toast.error('عذراً، اعتذر السائق عن تلبية هذا المشوار أو تم الإلغاء. يرجى طلب سائق آخر.');
               showExternalNotification({
                 title: 'إلغاء الرحلة ⚠️',
@@ -480,6 +662,9 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
               setCurrentOrderId(null);
               localStorage.removeItem('mazar_active_order_id');
               localStorage.removeItem('mazar_pending_chargily_order_id');
+              localStorage.removeItem('mazar_chargily_checkout_id');
+              localStorage.removeItem('mazar_chargily_checkout_url');
+              setPendingPayment(null);
               toast.success('✨ وصلت إلى وجهتك بسلامة الله. تم إنهاء الرحلة بنجاح!');
               showExternalNotification({
                 title: 'وصلت إلى وجهتك بسلامة الله ✨',
@@ -621,10 +806,15 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
         ? 'https://pay.chargily.net/api/v2/checkouts' 
         : 'https://pay.chargily.net/test/api/v2/checkouts';
 
-      const successRedirectUrl = `${window.location.origin}${window.location.pathname}?payment_status=success&order_id=${currentOrderId}`;
-      const failureRedirectUrl = `${window.location.origin}${window.location.pathname}?payment_status=failed&order_id=${currentOrderId}`;
+      const frontendBase = (import.meta.env.VITE_FRONTEND_BASE_URL || 'https://taskiin.vercel.app').replace(/\/+$/, '');
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const redirectBase = isLocalhost ? frontendBase : window.location.origin;
+
+      const successRedirectUrl = `${redirectBase}/?payment_status=success&order_id=${currentOrderId}`;
+      const failureRedirectUrl = `${redirectBase}/?payment_status=failed&order_id=${currentOrderId}`;
 
       let checkoutUrl = null;
+      let checkoutId = null;
 
       // 1. محاولة استدعاء دالة Supabase Edge Function أولاً
       try {
@@ -641,6 +831,7 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
         });
         if (!error && data?.checkout_url) {
           checkoutUrl = data.checkout_url;
+          checkoutId = data.id;
         }
       } catch (edgeErr) {
         console.warn('Edge function invoke error, falling back to direct Chargily API:', edgeErr);
@@ -672,11 +863,21 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
 
         const resData = await resp.json();
         checkoutUrl = resData.checkout_url;
+        checkoutId = resData.id;
       }
 
-      if (checkoutUrl) {
+      if (checkoutUrl && checkoutId) {
         localStorage.setItem('mazar_active_order_id', currentOrderId);
         localStorage.setItem('mazar_pending_chargily_order_id', currentOrderId);
+        localStorage.setItem('mazar_chargily_checkout_id', checkoutId);
+        localStorage.setItem('mazar_chargily_checkout_url', checkoutUrl);
+
+        setPendingPayment({
+          checkoutId,
+          checkoutUrl,
+          orderId: currentOrderId,
+          amount: offeredRide.total_amount
+        });
 
         await supabase.from('orders').update({
           payment_method: 'card',
@@ -684,7 +885,16 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
         }).eq('id', currentOrderId);
 
         toast.dismiss('payment');
-        window.location.href = checkoutUrl;
+        toast.success('تم فتح صفحة الدفع عبر شارجيلي... أكمل الدفع وسيتم تأكيد حجزك تلقائياً!', { duration: 6000 });
+
+        if (window.NativeBridge && typeof window.NativeBridge.openBrowser === 'function') {
+          window.NativeBridge.openBrowser(checkoutUrl);
+        } else {
+          const win = window.open(checkoutUrl, '_blank');
+          if (!win) {
+            window.location.href = checkoutUrl;
+          }
+        }
       } else {
         throw new Error('لم يتم استلام رابط الدفع من بوابة Chargily');
       }
@@ -1157,17 +1367,65 @@ export default function PilgrimDashboard({ userName: initialUserName, userId: pr
                       <div className="text-3xl font-black text-red-600">{offeredRide.total_amount} د.ج</div>
                     </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <button onClick={acceptOffer} className="flex-1 bg-gradient-to-r from-red-600 to-orange-500 text-white font-black py-4 px-3 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition flex items-center justify-center gap-2">
-                      <CreditCard size={18} /> دفع بالبطاقة (Chargily)
-                    </button>
-                    <button onClick={acceptOfferCash} className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-black py-4 px-3 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition flex items-center justify-center gap-2">
-                      <Wallet size={18} /> دفع نقداً عند الوصول
-                    </button>
-                    <button onClick={rejectOffer} className="bg-white border-2 border-red-200 text-red-500 font-bold py-4 px-6 rounded-2xl hover:bg-red-50 transition">
-                      رفض العرض
-                    </button>
-                  </div>
+                  {pendingPayment && pendingPayment.orderId === currentOrderId ? (
+                    <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-orange-300 rounded-2xl p-5 shadow-sm space-y-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center animate-pulse shrink-0">
+                          <CreditCard size={20} />
+                        </div>
+                        <div>
+                          <p className="font-black text-gray-900 text-base">جاري إتمام الدفع عبر شارجيلي (Chargily) 💳</p>
+                          <p className="text-gray-600 text-xs font-bold mt-0.5">صفحة الدفع مفتوحة الآن. فور إتمام الدفع بالبطاقة، سيتم تأكيد المشوار وتنبيه السائق تلقائياً!</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-2.5">
+                        <button
+                          onClick={() => verifyAndConfirmPayment(pendingPayment.checkoutId, pendingPayment.orderId, true)}
+                          disabled={isVerifyingPayment}
+                          className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 text-white font-black py-3 px-4 rounded-xl shadow hover:shadow-lg transition flex items-center justify-center gap-2"
+                        >
+                          <RefreshCw size={16} className={isVerifyingPayment ? 'animate-spin' : ''} />
+                          التحقق من حالة الدفع الآن
+                        </button>
+
+                        {pendingPayment.checkoutUrl && (
+                          <button
+                            onClick={() => {
+                              if (window.NativeBridge && typeof window.NativeBridge.openBrowser === 'function') {
+                                window.NativeBridge.openBrowser(pendingPayment.checkoutUrl);
+                              } else {
+                                const win = window.open(pendingPayment.checkoutUrl, '_blank');
+                                if (!win) window.location.href = pendingPayment.checkoutUrl;
+                              }
+                            }}
+                            className="bg-white border border-gray-300 text-gray-700 font-bold py-3 px-3 rounded-xl hover:bg-gray-50 transition flex items-center justify-center gap-1.5 text-sm"
+                          >
+                            <ExternalLink size={16} /> فتح صفحة الدفع
+                          </button>
+                        )}
+
+                        <button
+                          onClick={cancelPendingPaymentState}
+                          className="bg-white border border-red-200 text-red-500 font-bold py-3 px-3 rounded-xl hover:bg-red-50 transition text-sm"
+                        >
+                          إلغاء والعودة
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <button onClick={acceptOffer} className="flex-1 bg-gradient-to-r from-red-600 to-orange-500 text-white font-black py-4 px-3 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition flex items-center justify-center gap-2">
+                        <CreditCard size={18} /> دفع بالبطاقة (Chargily)
+                      </button>
+                      <button onClick={acceptOfferCash} className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-black py-4 px-3 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition flex items-center justify-center gap-2">
+                        <Wallet size={18} /> دفع نقداً عند الوصول
+                      </button>
+                      <button onClick={rejectOffer} className="bg-white border-2 border-red-200 text-red-500 font-bold py-4 px-6 rounded-2xl hover:bg-red-50 transition">
+                        رفض العرض
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

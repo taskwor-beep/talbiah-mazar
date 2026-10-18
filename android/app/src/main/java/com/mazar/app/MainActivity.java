@@ -235,6 +235,18 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface
+        public void openBrowser(String url) {
+            try {
+                if (url == null || url.trim().isEmpty()) return;
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(intent);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
         public void setUserSession(String role, String userId, String driverId, String supabaseUrl, String supabaseKey) {
             try {
                 SharedPreferences prefs = context.getSharedPreferences(MazarBackgroundService.PREFS_NAME, Context.MODE_PRIVATE);
